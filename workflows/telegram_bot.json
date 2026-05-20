@@ -193,7 +193,7 @@
       {
         "parameters": {
           "language": "javaScript",
-          "jsCode": "const podcastId = $json.id;\nconst audioBuffer = await this.helpers.request({\n  method: 'GET',\n  uri: 'http://backend:8000/api/podcasts/' + podcastId + '/audio',\n  encoding: null,\n});\nconst binaryData = await this.helpers.prepareBinaryData(audioBuffer, 'podcast.mp3', 'audio/mpeg');\nreturn [{ json: { podcastId }, binary: { audioData: binaryData } }];"
+          "jsCode": "const podcastId = $json.id;\nconst response = await this.helpers.httpRequest({\n  method: 'GET',\n  url: 'http://backend:8000/api/podcasts/' + podcastId + '/audio',\n  encoding: 'arraybuffer',\n});\nconst buffer = Buffer.from(response);\nconst binaryData = await this.helpers.prepareBinaryData(buffer, 'podcast.mp3', 'audio/mpeg');\nreturn [{ json: { podcastId }, binary: { audioData: binaryData } }];"
         },
         "id": "code-download-018",
         "name": "Download Audio",
@@ -203,18 +203,30 @@
       },
       {
         "parameters": {
-          "resource": "message",
-          "operation": "sendAudio",
-          "chatId": "6732301888",
-          "audio": "audioData",
-          "additionalFields": {}
+          "method": "POST",
+          "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendAudio",
+          "sendBody": true,
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "chat_id",
+                "value": "6732301888",
+                "parameterType": "formData"
+              },
+              {
+                "name": "audio",
+                "value": "audioData",
+                "parameterType": "formBinaryData"
+              }
+            ]
+          },
+          "options": {}
         },
-        "id": "tel-sendaudio-014",
-        "name": "Send Audio",
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1,
-        "position": [1850, 550],
-        "credentials": {}
+        "id": "http-sendaudio-019",
+        "name": "Send Audio Direct",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1850, 550]
       },
       {
         "parameters": {
@@ -428,7 +440,7 @@
         "main": [
           [
             {
-              "node": "Send Audio",
+              "node": "Send Audio Direct",
               "type": "main",
               "index": 0
             }

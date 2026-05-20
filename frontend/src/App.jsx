@@ -12,12 +12,22 @@ export default function App() {
   const [activeView, setActiveView] = useState('dashboard')
   const [documents, setDocuments] = useState([])
   const [monitoredFolders, setMonitoredFolders] = useState([])
-const [syncing, setSyncing] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    localStorage.setItem('theme', theme)
+  }, [theme])
 
   useEffect(() => {
     loadDocuments()
     loadFolders()
   }, [])
+
+  function toggleTheme() {
+    setTheme(t => t === 'dark' ? 'light' : 'dark')
+  }
 
   async function loadDocuments() {
     try {
@@ -64,10 +74,10 @@ const [syncing, setSyncing] = useState(false)
       const res = await api.post('/documents/sync')
       const data = res.data
       alert(
-        `Sincronización completada\n\n` +
-        `📄 Agregados: ${data.total_added}\n` +
-        `🗑️ Eliminados: ${data.total_removed}\n` +
-        (data.errors.length > 0 ? `⚠️ Errores: ${data.total_errors}` : '✅ Sin errores')
+        `Sincronizacion completada\n\n` +
+        `Agregados: ${data.total_added}\n` +
+        `Eliminados: ${data.total_removed}\n` +
+        (data.errors.length > 0 ? `Errores: ${data.total_errors}` : 'Sin errores')
       )
       loadDocuments()
       loadFolders()
@@ -80,12 +90,14 @@ const [syncing, setSyncing] = useState(false)
   }
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+    <div className="flex h-screen">
       <Sidebar
         activeView={activeView}
         onNavigate={setActiveView}
         folderCount={monitoredFolders.length}
         documentCount={documents.length}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       <main className="flex-1 overflow-y-auto p-6">
@@ -118,17 +130,11 @@ const [syncing, setSyncing] = useState(false)
           />
         )}
 
-        {activeView === 'chat' && (
-          <ChatWindow documents={documents} />
-        )}
+        {activeView === 'chat' && <ChatWindow />}
 
-        {activeView === 'flashcards' && (
-          <Flashcards />
-        )}
+        {activeView === 'flashcards' && <Flashcards />}
 
-        {activeView === 'quizzes' && (
-          <QuizViewer />
-        )}
+        {activeView === 'quizzes' && <QuizViewer />}
       </main>
     </div>
   )

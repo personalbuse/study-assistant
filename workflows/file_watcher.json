@@ -1,0 +1,88 @@
+[
+  {
+    "name": "File Watcher Sync",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "file-watcher",
+          "options": {}
+        },
+        "id": "webhook",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          250,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "url": "http://backend:8000/api/documents/process",
+          "options": {},
+          "sendBody": true,
+          "method": "POST",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "filepath",
+                "value": "={{ $json.body.filepath }}"
+              }
+            ]
+          }
+        },
+        "id": "http",
+        "name": "Process in Backend",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          450,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}"
+        },
+        "id": "respond",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          650,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Process in Backend",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process in Backend": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "id": "file-watcher-1",
+    "active": true,
+    "createdAt": "2026-05-19T00:00:00.000Z",
+    "updatedAt": "2026-05-19T00:00:00.000Z",
+    "settings": {}
+  }
+]

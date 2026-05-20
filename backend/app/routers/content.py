@@ -1,11 +1,16 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.document import Document
 from app.models.quiz import Summary, Flashcard, Quiz
 from app.services.groq_service import generate_summary, generate_quiz, generate_flashcards
 from app.services.vector_store import vector_store
+
+
+class QuizRequest(BaseModel):
+    num_questions: int = 5
 
 router = APIRouter()
 
@@ -93,7 +98,7 @@ def list_flashcards(document_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/quizzes/{document_id}")
-def create_quiz(document_id: int, db: Session = Depends(get_db)):
+def create_quiz(document_id: int, request: QuizRequest = None, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
@@ -105,7 +110,8 @@ def create_quiz(document_id: int, db: Session = Depends(get_db)):
     results = vector_store.search(f"Contenido del documento {doc.filename}", top_k=20)
     combined_text = "\n\n".join([r["text"] for r in results])
 
-    raw = generate_quiz(combined_text)
+    num_q = request.num_questions if request else 5
+    raw = generate_quiz(combined_text, num_questions=num_q)
     try:
         data = json.loads(raw.strip("```json\n").strip("```").strip())
         questions = data.get("questions", [])

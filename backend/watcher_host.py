@@ -10,7 +10,8 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 API_URL = "http://localhost:8000"
-SUPPORTED = {".pdf", ".pptx", ".docx", ".txt"}
+N8N_WEBHOOK_URL = "http://localhost:5678/webhook/file-watcher"
+SUPPORTED = {".pdf", ".pptx", ".docx", ".md", ".txt"}
 POLL_INTERVAL = 5
 HASH_FILE = os.path.join(os.path.dirname(__file__), "..", "processed_hashes.json")
 
@@ -45,14 +46,14 @@ class WatcherHandler(FileSystemEventHandler):
 
         try:
             resp = requests.post(
-                f"{API_URL}/api/documents/process",
-                params={"filepath": filepath},
+                f"{N8N_WEBHOOK_URL}",
+                json={"filepath": filepath},
                 timeout=120,
             )
             if resp.status_code == 200:
                 self.processed.add(file_hash)
                 save_hashes(self.processed)
-                print(f"  ✅ {filename} procesado")
+                print(f"  ✅ {filename} enviado a n8n")
             else:
                 print(f"  ❌ {filename} error: {resp.text}")
         except Exception as e:

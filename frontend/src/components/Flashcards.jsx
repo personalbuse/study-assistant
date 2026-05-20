@@ -39,10 +39,15 @@ export default function Flashcards() {
       <h2 className="text-2xl font-bold mb-6">Flashcards</h2>
 
       <div className="mb-6">
-        <label className="text-sm text-gray-400 mb-2 block">Selecciona un documento:</label>
+        <label className="text-sm mb-2 block" style={{ color: 'var(--text-muted)' }}>Selecciona un documento:</label>
         <select
           onChange={(e) => e.target.value && loadFlashcards(Number(e.target.value))}
-          className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600"
+          className="w-full p-3 rounded-lg border focus:outline-none"
+          style={{
+            background: 'var(--bg-secondary)',
+            borderColor: 'var(--border)',
+            color: 'var(--text-primary)',
+          }}
         >
           <option value="">-- Seleccionar --</option>
           {documents.map((doc) => (
@@ -51,40 +56,41 @@ export default function Flashcards() {
         </select>
       </div>
 
-      {loading && <div className="text-center text-gray-400">Generando flashcards...</div>}
+      {loading && <div className="text-center" style={{ color: 'var(--text-muted)' }}>Generando flashcards...</div>}
 
       {current && !loading && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <div
             onClick={() => setFlipped(!flipped)}
-            className="w-full max-w-lg h-64 bg-gray-800 rounded-xl p-8 cursor-pointer flex items-center justify-center text-center hover:bg-gray-750 transition-all"
+            className="w-full max-w-lg h-64 rounded-xl p-8 cursor-pointer flex items-center justify-center text-center transition-all"
+            style={{ background: 'var(--bg-secondary)' }}
           >
             <div>
-              <p className="text-sm text-gray-400 mb-4">
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
                 {flipped ? 'Respuesta' : 'Pregunta'} · {currentIndex + 1}/{flashcards.length}
               </p>
-              <p className="text-xl">
-                {flipped ? current.answer : current.question}
-              </p>
+              <p className="text-xl">{flipped ? current.answer : current.question}</p>
               {current.topic && (
-                <p className="text-sm text-blue-400 mt-4">#{current.topic}</p>
+                <p className="text-sm mt-4" style={{ color: 'var(--accent)' }}>#{current.topic}</p>
               )}
             </div>
           </div>
-          <p className="text-sm text-gray-500 mt-4">Haz clic para voltear</p>
+          <p className="text-sm mt-4" style={{ color: 'var(--text-muted)' }}>Haz clic para voltear</p>
 
           <div className="flex gap-4 mt-6">
             <button
               onClick={() => { setFlipped(false); setCurrentIndex(Math.max(0, currentIndex - 1)) }}
               disabled={currentIndex === 0}
-              className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
             >
               Anterior
             </button>
             <button
               onClick={() => { setFlipped(false); setCurrentIndex(Math.min(flashcards.length - 1, currentIndex + 1)) }}
               disabled={currentIndex === flashcards.length - 1}
-              className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-50"
+              style={{ background: 'var(--accent)' }}
             >
               Siguiente
             </button>
@@ -93,7 +99,7 @@ export default function Flashcards() {
       )}
 
       {!current && !loading && selectedDoc && (
-        <div className="text-center text-gray-400">No hay flashcards para este documento</div>
+        <div className="text-center" style={{ color: 'var(--text-muted)' }}>No hay flashcards para este documento</div>
       )}
     </div>
   )

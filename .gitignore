@@ -11,3 +11,14 @@ documents/*
 !documents/.gitkeep
 .venv/
 *.egg-info/
+
+# Generated audio files
+podcasts/
+
+# Temporary / test files
+backend/test_groq.py
+processed_hashes.json
+
+# OS files
+.DS_Store
+Thumbs.db

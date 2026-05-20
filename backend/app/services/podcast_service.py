@@ -1,25 +1,25 @@
 import json
 import os
+import wave
 import httpx
 import base64
 from app.services.groq_service import ask_groq
 from app.config import settings
 
 AUDIO_DIR = "/app/podcasts"
-DURATION_WORDS = 1800
 
 def generate_podcast_script(texts: list[str], title: str) -> list[dict]:
     combined = "\n\n---\n\n".join(texts)
-    target_words = DURATION_WORDS
 
     prompt = f"""Eres un guionista de podcasts educativos. Genera un guion de conversacion entre dos presentadores (HostA y HostB) discutiendo el siguiente contenido academico en ESPAÑOL.
 
-Requisitos:
-- Debe durar aproximadamente 10-12 minutos de conversacion natural
+Requisitos ESTRICTOS:
+- Debe durar 10-12 minutos de conversacion natural (al menos 25 intercambios)
+- Cada intervencion debe tener 2-4 parrafos de contenido sustancial
 - HostA guia la conversacion, HostB hace preguntas y aporta ejemplos
 - Incluye: introduccion, desarrollo de conceptos clave, ejemplos practicos, conclusion
 - Usa un tono conversacional, no formal
-- Alterna entre los dos presentadores cada 2-4 intercambios aproximadamente
+- Alterna entre los dos presentadores
 
 Devuelve SOLO JSON valido sin markdown:
 {{
@@ -30,7 +30,7 @@ Devuelve SOLO JSON valido sin markdown:
 }}
 
 Contenido:
-{combined[:8000]}"""
+{combined[:10000]}"""
 
     raw = ask_groq(prompt)
     try:
@@ -47,19 +47,19 @@ Contenido:
 def synthesize_audio(turns: list[dict], podcast_id: int) -> str:
     script_text = "\n".join(f"{t['speaker']}: {t['text']}" for t in turns)
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-tts:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
     params = {"key": settings.google_api_key}
 
     body = {
         "contents": [{
-            "parts": [{"text": f"Lee el siguiente guion de podcast en español usando dos voces diferentes, una para cada presentador:\n\n{script_text}"}]
+            "parts": [{"text": script_text}]
         }],
         "generationConfig": {
-            "responseModality": "audio",
+            "responseModalities": ["AUDIO"],
             "speechConfig": {
                 "voiceConfig": {
                     "prebuiltVoiceConfig": {
-                        "voiceName": "es-ES-Standard-A"
+                        "voiceName": "zephyr"
                     }
                 }
             }
@@ -67,10 +67,10 @@ def synthesize_audio(turns: list[dict], podcast_id: int) -> str:
     }
 
     os.makedirs(AUDIO_DIR, exist_ok=True)
-    output_path = os.path.join(AUDIO_DIR, f"podcast_{podcast_id}.mp3")
+    wav_path = os.path.join(AUDIO_DIR, f"podcast_{podcast_id}.wav")
 
     try:
-        with httpx.Client(timeout=120.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             resp = client.post(url, params=params, json=body)
             resp.raise_for_status()
             data = resp.json()
@@ -78,18 +78,32 @@ def synthesize_audio(turns: list[dict], podcast_id: int) -> str:
         parts = data["candidates"][0]["content"]["parts"]
         audio_b64 = None
         for p in parts:
-            if "inlineData" in p and p["inlineData"].get("mimeType", "").startswith("audio/"):
+            if "inlineData" in p:
                 audio_b64 = p["inlineData"]["data"]
                 break
 
         if not audio_b64:
             raise Exception("No audio data in response")
 
-        audio_bytes = base64.b64decode(audio_b64)
-        with open(output_path, "wb") as f:
-            f.write(audio_bytes)
+        pcm_bytes = base64.b64decode(audio_b64)
+
+        with wave.open(wav_path, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(24000)
+            wf.writeframes(pcm_bytes)
+
+        actual_duration = len(pcm_bytes) // (24000 * 2)
+
+        try:
+            from pydub import AudioSegment
+            mp3_path = os.path.join(AUDIO_DIR, f"podcast_{podcast_id}.mp3")
+            audio = AudioSegment.from_wav(wav_path)
+            audio.export(mp3_path, format="mp3", bitrate="128k")
+            os.remove(wav_path)
+            return mp3_path, actual_duration
+        except Exception:
+            return wav_path, actual_duration
 
     except Exception as e:
         raise Exception(f"Error al sintetizar audio con Gemini TTS: {e}")
-
-    return output_path

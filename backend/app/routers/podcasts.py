@@ -37,8 +37,9 @@ def create_podcast_by_document(document_id: int, db: Session = Depends(get_db)):
     db.refresh(podcast)
 
     try:
-        audio_path = synthesize_audio(turns, podcast.id)
+        audio_path, actual_duration = synthesize_audio(turns, podcast.id)
         podcast.audio_path = audio_path
+        podcast.duration_seconds = actual_duration
         db.commit()
     except Exception as e:
         db.delete(podcast)
@@ -90,8 +91,9 @@ def create_podcast_by_folder(folder_id: int, db: Session = Depends(get_db)):
     db.refresh(podcast)
 
     try:
-        audio_path = synthesize_audio(turns, podcast.id)
+        audio_path, actual_duration = synthesize_audio(turns, podcast.id)
         podcast.audio_path = audio_path
+        podcast.duration_seconds = actual_duration
         db.commit()
     except Exception as e:
         db.delete(podcast)
@@ -130,7 +132,9 @@ def get_podcast_audio(podcast_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Podcast no encontrado")
     if not podcast.audio_path or not os.path.exists(podcast.audio_path):
         raise HTTPException(status_code=404, detail="Audio no encontrado")
-    return FileResponse(podcast.audio_path, media_type="audio/mpeg")
+    ext = os.path.splitext(podcast.audio_path)[1].lower()
+    media_type = "audio/mpeg" if ext == ".mp3" else "audio/wav"
+    return FileResponse(podcast.audio_path, media_type=media_type)
 
 
 @router.delete("/{podcast_id}")

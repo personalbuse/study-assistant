@@ -1,0 +1,66 @@
+{
+  "name": "Process Document",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-document",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst first = items[0].json;\n\nconst data = first.body || first;\n\nif (!data.text) {\n  return [{ json: { error: 'Campo text no encontrado', received: JSON.stringify(first) } }];\n}\n\nconst words = data.text.split(' ');\nconst chunkSize = 500;\nconst chunks = [];\nlet current = [];\nlet currentLen = 0;\nlet chunkNum = 1;\n\nfor (const word of words) {\n  current.push(word);\n  currentLen += word.length + 1;\n  if (currentLen >= chunkSize) {\n    chunks.push({\n      document_id: data.document_id,\n      filename: data.filename,\n      chunk_number: chunkNum,\n      text: current.join(' ')\n    });\n    current = [];\n    currentLen = 0;\n    chunkNum++;\n  }\n}\nif (current.length > 0) {\n  chunks.push({\n    document_id: data.document_id,\n    filename: data.filename,\n    chunk_number: chunkNum,\n    text: current.join(' ')\n  });\n}\n\nreturn [{ json: { chunks: chunks } }];"
+      },
+      "id": "chunk",
+      "name": "Chunk Document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/documents/n8n-chunks",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "http",
+      "name": "Send to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseBody": "={\n  \"status\": \"ok\",\n  \"document_id\": {{ $('Webhook').item.json.body.document_id }},\n  \"filename\": \"{{ $('Webhook').item.json.body.filename }}\"\n}"
+        }
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [250, 100]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Chunk Document", "type": "main", "index": 0 }]]
+    },
+    "Chunk Document": {
+      "main": [[{ "node": "Send to Backend", "type": "main", "index": 0 }, { "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  }
+}

@@ -1,0 +1,5 @@
+storage:
+  optimizers:
+    default_segment_number: 2
+  wal:
+    wal_capacity_mb: 32

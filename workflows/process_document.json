@@ -1,0 +1,45 @@
+{
+  "name": "Process Document",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-document",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.text;\nconst docId = $input.first().json.document_id;\nconst filename = $input.first().json.filename;\n\nconst chunkSize = 500;\nconst words = text.split(' ');\nconst chunks = [];\nlet current = [];\nlet currentLen = 0;\nlet chunkNum = 1;\n\nfor (const word of words) {\n  current.push(word);\n  currentLen += word.length + 1;\n  \n  if (currentLen >= chunkSize) {\n    chunks.push({\n      document_id: docId,\n      filename: filename,\n      chunk_number: chunkNum,\n      text: current.join(' '),\n    });\n    current = [];\n    currentLen = 0;\n    chunkNum++;\n  }\n}\n\nif (current.length > 0) {\n  chunks.push({\n    document_id: docId,\n    filename: filename,\n    chunk_number: chunkNum,\n    text: current.join(' '),\n  });\n}\n\nreturn chunks;"
+      },
+      "id": "chunk",
+      "name": "Chunk Document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Chunk Document", "type": "main", "index": 0 }]]
+    },
+    "Chunk Document": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  }
+}

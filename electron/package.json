@@ -1,0 +1,29 @@
+{
+  "name": "study-assistant-electron",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.study.assistant",
+    "productName": "Study Assistant",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "../frontend/dist/**/*"
+    ],
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  }
+}

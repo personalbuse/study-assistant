@@ -1,0 +1,18 @@
+appId: com.study.assistant
+productName: Study Assistant
+directories:
+  output: dist
+files:
+  - main.js
+  - preload.js
+  - ../frontend/dist/**/*
+linux:
+  target:
+    - AppImage
+    - deb
+mac:
+  target:
+    - dmg
+win:
+  target:
+    - nsis

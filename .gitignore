@@ -1,0 +1,13 @@
+.env
+node_modules/
+__pycache__/
+*.pyc
+dist/
+frontend/dist/
+electron/dist/
+generated/*
+!generated/.gitkeep
+documents/*
+!documents/.gitkeep
+.venv/
+*.egg-info/

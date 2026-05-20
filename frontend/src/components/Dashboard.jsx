@@ -35,8 +35,8 @@ export default function Dashboard({ documents, folders, onSelectFolder }) {
         )}
         <button
           onClick={onSelectFolder}
-          className="mt-4 px-4 py-2 rounded-lg transition-colors text-white"
-          style={{ background: 'var(--accent)' }}
+          className="mt-4 px-4 py-2 rounded-lg transition-colors"
+          style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
         >
           + Agregar carpeta
         </button>

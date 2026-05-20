@@ -26,7 +26,7 @@ export default function Sidebar({ activeView, onNavigate, folderCount, documentC
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors"
             style={{
               background: activeView === item.id ? 'var(--accent)' : 'transparent',
-              color: activeView === item.id ? '#fff' : 'var(--text-secondary)',
+              color: activeView === item.id ? 'var(--accent-text)' : 'var(--text-secondary)',
             }}
             onMouseEnter={(e) => {
               if (activeView !== item.id) e.target.style.background = 'var(--bg-tertiary)'

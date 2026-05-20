@@ -50,7 +50,7 @@ export default function ChatWindow() {
             className="p-4 rounded-lg"
             style={{
               background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-secondary)',
-              color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
+              color: msg.role === 'user' ? 'var(--accent-text)' : 'var(--text-primary)',
               marginLeft: msg.role === 'user' ? '3rem' : '0',
               marginRight: msg.role === 'assistant' ? '3rem' : '0',
             }}
@@ -100,8 +100,8 @@ export default function ChatWindow() {
         <button
           onClick={sendMessage}
           disabled={loading}
-          className="px-6 py-3 rounded-lg text-white transition-colors disabled:opacity-50"
-          style={{ background: 'var(--accent)' }}
+          className="px-6 py-3 rounded-lg transition-colors disabled:opacity-50"
+          style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
         >
           Enviar
         </button>

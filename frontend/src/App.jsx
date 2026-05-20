@@ -121,6 +121,7 @@ export default function App() {
               try {
                 await api.delete('/monitor/folders', { data: { path } })
                 loadFolders()
+                loadDocuments()
               } catch (err) {
                 console.error('Error removing folder:', err)
               }

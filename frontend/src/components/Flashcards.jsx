@@ -89,8 +89,8 @@ export default function Flashcards() {
             <button
               onClick={() => { setFlipped(false); setCurrentIndex(Math.min(flashcards.length - 1, currentIndex + 1)) }}
               disabled={currentIndex === flashcards.length - 1}
-              className="px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-50"
-              style={{ background: 'var(--accent)' }}
+              className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
             >
               Siguiente
             </button>

@@ -103,8 +103,8 @@ export default function QuizViewer() {
           <button
             onClick={generateQuiz}
             disabled={!selectedDoc}
-            className="px-6 py-3 rounded-lg text-white transition-colors disabled:opacity-50"
-            style={{ background: 'var(--accent)' }}
+            className="px-6 py-3 rounded-lg transition-colors disabled:opacity-50"
+            style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
           >
             Generar Quiz
           </button>
@@ -131,8 +131,8 @@ export default function QuizViewer() {
             {phase === PHASES.RESULTS && (
               <button
                 onClick={reset}
-                className="px-4 py-2 rounded-lg text-white transition-colors"
-                style={{ background: 'var(--accent)' }}
+                className="px-4 py-2 rounded-lg transition-colors"
+                style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
               >
                 Nuevo Quiz
               </button>
@@ -186,8 +186,8 @@ export default function QuizViewer() {
             {phase === PHASES.ANSWER ? (
               <button
                 onClick={() => setPhase(PHASES.RESULTS)}
-                className="px-6 py-3 rounded-lg text-white transition-colors"
-                style={{ background: 'var(--accent)' }}
+                className="px-6 py-3 rounded-lg transition-colors"
+                style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
               >
                 Calificar
               </button>

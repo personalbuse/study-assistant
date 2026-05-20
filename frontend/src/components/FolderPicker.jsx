@@ -17,8 +17,8 @@ export default function FolderPicker({ folders, onAddFolder, onRemoveFolder, onS
 
       <button
         onClick={onAddFolder}
-        className="mb-6 px-6 py-3 rounded-lg text-white transition-colors"
-        style={{ background: 'var(--accent)' }}
+        className="mb-6 px-6 py-3 rounded-lg transition-colors"
+        style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
       >
         Seleccionar carpeta
       </button>

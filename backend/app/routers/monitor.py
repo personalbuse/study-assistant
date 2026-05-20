@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.document import MonitoredFolder
+from app.models.document import MonitoredFolder, Document
 from app.services.file_watcher import folder_monitor
+from app.services.vector_store import vector_store
 from app.schemas.schemas import FolderRequest, FolderResponse
 
 router = APIRouter()
@@ -44,6 +45,13 @@ def remove_folder(request: FolderRequest, db: Session = Depends(get_db)):
     ).first()
     if not folder:
         raise HTTPException(status_code=404, detail="Carpeta no encontrada")
+
+    docs = db.query(Document).filter(
+        Document.filepath.startswith(request.path)
+    ).all()
+    for doc in docs:
+        vector_store.delete_document_chunks(doc.id)
+        db.delete(doc)
 
     db.delete(folder)
     db.commit()

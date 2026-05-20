@@ -44,7 +44,19 @@ else
   echo "⚠️  (puede que ya exista, continuamos...)"
 fi
 
-# 4. Insertar workflow directo en la BD
+# 4. Limpiar workflows antiguos y re-insertar
+echo "🧹 Eliminando workflows 'Telegram Bot' anteriores..."
+docker exec study-n8n node -e "
+const { DatabaseSync } = require('node:sqlite');
+const db = new DatabaseSync('/home/node/.n8n/database.sqlite');
+const old = db.prepare(\"SELECT id FROM workflow_entity WHERE name = 'Telegram Bot'\").all();
+const delSW = db.prepare('DELETE FROM shared_workflow WHERE workflowId = ?');
+const delWF = db.prepare('DELETE FROM workflow_entity WHERE id = ?');
+for (const row of old) { delSW.run(row.id); delWF.run(row.id); }
+console.log('Eliminados ' + old.length + ' workflow(s) antiguo(s)');
+db.close();
+"
+
 echo "📦 Insertando workflow 'Telegram Bot' en la BD..."
 docker cp "$(dirname "$0")/workflows/telegram_bot.json" study-n8n:/tmp/telegram_bot.json
 

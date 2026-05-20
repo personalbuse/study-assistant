@@ -233,7 +233,7 @@
           "resource": "message",
           "operation": "sendAudio",
           "chatId": "6732301888",
-          "audio": "={{ $binary.audioData }}",
+          "audio": "audioData",
           "additionalFields": {}
         },
         "id": "tel-sendaudio-014",

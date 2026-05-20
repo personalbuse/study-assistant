@@ -7,51 +7,50 @@ Asistente de estudio personal con procesamiento automatizado de documentos, chat
 ## Arquitectura General
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Host (tu PC)                         │
-│                                                         │
-│  ┌──────────┐   ┌──────────┐   ┌────────────────────┐  │
-│  │ Electron │   │ Frontend │   │ watcher_host.py    │  │
-│  │ (ventana)│◄─►│ (Vite +  │   │ (watchdog nativo)  │  │
-│  │          │   │  React)  │   │                    │  │
-│  └──────────┘   └────┬─────┘   └─────────┬──────────┘  │
-│                      │                   │             │
-│                  :5173               llama a webhook   │
-│                      │                   │             │
-└──────────────────────┼───────────────────┼─────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        Host (tu PC)                          │
+│                                                              │
+│  ┌──────────┐   ┌──────────┐   ┌────────────────────┐       │
+│  │ Electron │   │ Frontend │   │ watcher_host.py    │       │
+│  │ (ventana)│◄─►│ (Vite +  │   │ (watchdog nativo)  │       │
+│  │          │   │  React)  │   │                    │       │
+│  └──────────┘   └────┬─────┘   └─────────┬──────────┘       │
+│                      │                   │                  │
+│                  :5173               llama a webhook        │
+│                      │                   │                  │
+└──────────────────────┼───────────────────┼──────────────────┘
                        │                   │
                   HTTP │               HTTP│
                        ▼                   ▼
-              ┌──────────────────────────────────┐
-              │        Docker Network             │
-              │        study-net                  │
-              │                                   │
-              │  ┌─────────┐   ┌──────────────┐  │
-              │  │ Backend │──►│ PostgreSQL   │  │
-              │  │ FastAPI  │   │ (metadatos)  │  │
-              │  │ :8000   │   └──────────────┘  │
-              │  │         │   ┌──────────────┐  │
-              │  │         │──►│ Qdrant       │  │
-              │  │         │   │ (vectores)   │  │
-              │  └────┬────┘   └──────────────┘  │
-              │       │                          │
-              │  ┌────▼────┐                     │
-              │  │ n8n     │                     │
-              │  │ :5678   │                     │
-              │  └─────────┘                     │
-              └──────────────────────────────────┘
-                       │
-                       │ APIs externas
-                       ▼
-              ┌──────────────────┐
-              │  Groq (LLM)      │
-              │  llama-3.3-70b   │
-              └──────────────────┘
-              ┌──────────────────┐
-              │  Gemini TTS      │
-              │  (podcast audio) │
-              └──────────────────┘
-```
+              ┌─────────────────────────────────────┐
+              │          Docker Network              │
+              │          study-net                   │
+              │                                      │
+              │  ┌─────────┐   ┌──────────────┐     │
+              │  │ Backend │──►│ PostgreSQL   │     │
+              │  │ FastAPI  │   │ (metadatos)  │     │
+              │  │ :8000   │   └──────────────┘     │
+              │  │         │   ┌──────────────┐     │
+              │  │         │──►│ Qdrant       │     │
+              │  │         │   │ (vectores)   │     │
+              │  └────┬────┘   └──────────────┘     │
+              │       │                             │
+              │  ┌────▼────┐    ┌──────────────┐    │
+              │  │ n8n     │◄──►│ ngrok        │    │
+              │  │ :5678   │    │ (túnel TLS)  │    │
+              │  └─────────┘    └──────┬───────┘    │
+              └───────────────────────┼─────────────┘
+                          │           │
+                     APIs │      HTTPS│ Webhook
+                     ext. │           │ Telegram
+                          ▼           ▼
+                 ┌──────────────┐  ┌──────────┐
+                 │  Groq (LLM)  │  │ Telegram │
+                 │ llama-3.3-70b│  │ Bot API  │
+                 ├──────────────┤  └──────────┘
+                 │ Gemini TTS   │
+                 │ (podcast)    │
+                 └──────────────┘
 
 ---
 
@@ -75,6 +74,13 @@ n8n actúa como **orquestador de procesamiento**. Cuando un documento llega:
 
 El workflow `file_watcher.json` se activa desde un script Python (`watcher_host.py`) que corre en el **host** (no dentro de Docker) usando `watchdog` para detectar archivos nuevos en carpetas monitoreadas.
 
+n8n también orquesta el **bot de Telegram** (`workflows/telegram_bot.json`):
+1. Recibe mensajes vía webhook (ngrok → n8n)
+2. Filtra por owner y rutea por comando
+3. Para `/ask`: envía la pregunta al backend FastAPI (RAG con Qdrant + Groq)
+4. Para `/podcast gen`: llama al backend, que genera guion (Groq) y audio (Gemini TTS)
+5. Devuelve respuestas de texto o archivos MP3 al usuario por Telegram
+
 ### Workflows incluidos
 
 | Archivo | Propósito |
@@ -82,6 +88,7 @@ El workflow `file_watcher.json` se activa desde un script Python (`watcher_host.
 | `workflows/file_watcher.json` | Webhook de entrada desde watcher_host.py → envía a backend |
 | `workflows/process_document.json` | Procesamiento de documentos (v1, más simple) |
 | `workflows/process_document_v2.json` | Procesamiento mejorado con manejo de errores |
+| `workflows/telegram_bot.json` | Bot de Telegram: RAG chat y generación de podcasts |
 
 ---
 
@@ -146,6 +153,8 @@ Qdrant es:
 | Contenedores | Docker Compose                    |
 | Red interna  | `study-net` (bridge)              |
 | Orquestación | n8n (workflows visuales)          |
+| Túnel HTTPS  | ngrok (para webhook Telegram)     |
+| Bot Telegram | BotFather + Telegram Bot API      |
 
 ---
 
@@ -366,15 +375,21 @@ synthesize_audio(turns, podcast_id)
 - API keys:
   - Groq: https://console.groq.com (modelo usado: `llama-3.3-70b-versatile`)
   - Google: https://aistudio.google.com (para Gemini TTS, modelo: `gemini-2.5-flash-preview-tts`)
+  - Telegram: crear bot con [BotFather](https://t.me/BotFather) y obtener token
+  - ngrok: cuenta gratuita en https://ngrok.com (para túnel HTTPS al bot)
 
 ### Variables de Entorno (`.env`)
 
 ```env
 GROQ_API_KEY=gsk_tu_key_aqui
 GOOGLE_API_KEY=AIza_tu_key_aqui
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVwxyz
+TELEGRAM_OWNER_ID=123456789
+NGROK_AUTHTOKEN=2abc123def456
+NGROK_DOMAIN=midominio.ngrok-free.dev
 ```
 
-Ambas se pasan al contenedor backend via `docker-compose.yml`.
+Las primeras dos se pasan al backend, las de Telegram/ngrok al stack n8n + ngrok via `docker-compose.yml`.
 
 ### Levantar el Proyecto
 
@@ -408,6 +423,7 @@ cd electron && npm install && npm run dev
 | Backend     | 8000   | http://localhost:8000   |
 | Frontend    | 5173   | http://localhost:5173   |
 | n8n         | 5678   | http://localhost:5678   |
+| ngrok       | —      | https://{domain}.ngrok-free.dev |
 | Qdrant      | 6333   | http://localhost:6333   |
 | PostgreSQL  | 5433   | postgresql://localhost:5433 |
 
@@ -419,6 +435,45 @@ cd electron && npm install && npm run dev
 4. Importar `workflows/file_watcher.json`
 5. Toggle "Active" para activar el webhook
 6. (Si no hay callback a backend, ajustar URL en el nodo HTTP Request)
+
+### Telegram Bot
+
+```
+⚠️  El workflow de Telegram no se puede importar por la UI de n8n
+    debido a conflictos de credenciales. Usa el script automatizado.
+```
+
+```bash
+# 1. Configurar .env con TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_ID,
+#    NGROK_AUTHTOKEN, NGROK_DOMAIN
+
+# 2. Asegurar que Docker Compose está levantado
+docker compose up -d
+
+# 3. Ejecutar setup (importa credencial + workflow en DB)
+bash setup_telegram_bot.sh
+
+# 4. Abrir http://localhost:5678
+# 5. Abrir workflow "Telegram Bot"
+# 6. Vincular credencial "Telegram Bot" en CADA nodo Telegram
+#    (Trigger, Send Welcome, Send Help, Send Docs List, Send Generating,
+#     Send Podcast Help, Send Answer, Send Audio)
+# 7. Activar el workflow con el toggle ▶️
+# 8. Hablar con tu bot en Telegram
+```
+
+**Comandos del bot:**
+
+| Comando | Acción |
+|---------|--------|
+| `/start` | Mensaje de bienvenida |
+| `/help` | Lista de comandos |
+| `/ask <pregunta>` | Chat RAG con contexto de tus documentos |
+| `/podcast list` | Lista documentos disponibles |
+| `/podcast gen <id>` | Genera podcast de un documento |
+| `/podcast` | Ayuda de podcasts |
+
+> **Idea principal**: el usuario configura carpetas locales (via Electron o watcher_host.py). Los documentos se procesan automáticamente (extracción → chunks → embeddings → Qdrant). Desde Telegram puedes consultar con RAG (`/ask`) o generar y escuchar podcasts (`/podcast gen`) cuando no tienes el PC a mano.
 
 ---
 
@@ -437,6 +492,9 @@ cd electron && npm install && npm run dev
 | **CSS variables sin blue** | Tema estrictamente monocromático: blanco puro / negro puro / grises neutros. Sin tonos azules o slate |
 | **Cascade delete en carpetas** | Al eliminar carpeta monitoreada, se borran todos sus documentos (PostgreSQL + Qdrant chunks) automáticamente |
 | **Single-user, sin auth** | Diseñado para uso personal local; no hay rutas de autenticación ni sesiones |
+| **Telegram por webhook + ngrok** | n8n 2.x no soporta polling; ngrok expone el webhook HTTPS con dominio fijo gratuito |
+| **Filtro por chat_id** | El nodo IF `Is Owner?` bloquea mensajes de cualquiera que no sea el dueño (`TELEGRAM_OWNER_ID`) |
+| **Importación SQL directa** | `n8n import:workflow` falla por conflictos de reassignación de credenciales; se inserta directo en SQLite |
 
 ---
 
@@ -465,7 +523,74 @@ cd electron && npm install && npm run dev
 
 ---
 
-## Próximas Mejoras Potenciales
+## Telegram Bot — Uso Remoto
+
+El bot de Telegram (`@studied_up_bot`) permite interactuar con tu asistente de estudio desde el celular, sin necesidad de tener el frontend abierto.
+
+### Flujo
+
+```
+Usuario abre Telegram
+        │
+        ▼
+  Envía comando al bot (@studied_up_bot)
+        │
+        ▼
+  ngrok (túnel HTTPS) → n8n Webhook
+        │
+        ▼
+  n8n Telegram Trigger recibe el mensaje
+        │
+        ▼
+  Switch node: rutea según el comando
+     ├── /ask → Code node (limpia /ask) → HTTP POST /api/chat/ask
+     │           → Backend RAG (Qdrant + Groq) → Respuesta → Telegram
+     │
+     └── /podcast gen <id> → HTTP POST /api/podcasts/by-document/{id}
+                             → Backend genera script (Groq)
+                             → Gemini TTS sintetiza audio
+                             → Audio MP3 → Telegram como mensaje de audio
+```
+
+### Requisitos para usar desde el celular
+
+1. **PC encendido** con Docker Compose corriendo
+2. **ngrok activo** (se levanta automáticamente con `docker compose up -d`)
+3. **Workflow activo** en n8n (toggle ▶️ ON)
+4. Conexión a internet (tu PC necesita salida)
+
+### Escuchar podcasts sin PC a mano
+
+1. Envía `/podcast list` para ver documentos disponibles con sus IDs
+2. Envía `/podcast gen <id>` para generar el podcast
+3. Espera ~30-60s (Groq genera guion + Gemini sintetiza audio)
+4. El bot te envía el archivo MP3 — escúchalo directo en Telegram
+
+### Arquitectura del workflow Telegram
+
+```
+Telegram Trigger (webhook vía ngrok)
+        │
+        ▼
+  Is Owner? (filtra por chat_id = TELEGRAM_OWNER_ID)
+        │
+        ▼
+  Route Command (Switch)
+     ├── output 0: /start   → Send Welcome
+     ├── output 1: /help    → Send Help
+     ├── output 2: /podcast list → Format Docs List → Send Docs List
+     ├── output 3: /podcast gen  → Send Generating → Extract Doc ID
+     │                           → Generate Podcast → Save Podcast ID
+     │                           → Get Audio → Send Audio
+     ├── output 4: /podcast → Send Podcast Help
+     ├── output 5: /ask     → Prepare Chat Body (Code)
+     │                       → Chat Ask (HTTP backend) → Send Answer
+     └── output 6: fallback → Send Help
+```
+
+El workflow `workflows/telegram_bot.json` se importa directamente en la base de datos SQLite de n8n mediante el script `setup_telegram_bot.sh`.
+
+---
 
 - Chat persistente por documento (historial asociado a `document_id`)
 - Búsqueda global de texto en todos los documentos

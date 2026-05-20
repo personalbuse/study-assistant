@@ -192,17 +192,13 @@
       },
       {
         "parameters": {
-          "url": "=http://backend:8000/api/podcasts/{{ $json.id }}/audio",
-          "responseFormat": "file",
-          "outputPropertyName": "audioData",
-          "options": {},
-          "sendBody": false,
-          "method": "GET"
+          "language": "javaScript",
+          "jsCode": "const podcastId = $json.id;\nconst audioBuffer = await this.helpers.request({\n  method: 'GET',\n  uri: 'http://backend:8000/api/podcasts/' + podcastId + '/audio',\n  encoding: null,\n});\nconst binaryData = await this.helpers.prepareBinaryData(audioBuffer, 'podcast.mp3', 'audio/mpeg');\nreturn [{ json: { podcastId }, binary: { audioData: binaryData } }];"
         },
-        "id": "http-audio-013",
-        "name": "Get Audio",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "id": "code-download-018",
+        "name": "Download Audio",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
         "position": [1450, 550]
       },
       {
@@ -421,14 +417,14 @@
         "main": [
           [
             {
-              "node": "Get Audio",
+              "node": "Download Audio",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Get Audio": {
+      "Download Audio": {
         "main": [
           [
             {

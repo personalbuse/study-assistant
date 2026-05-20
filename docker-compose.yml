@@ -60,6 +60,7 @@ services:
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       GROQ_API_KEY: ${GROQ_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       N8N_WEBHOOK_URL: http://n8n:5678/webhook
     ports:
       - "8000:8000"
@@ -67,6 +68,7 @@ services:
       - ./documents:/documents
       - ./backend:/app
       - /home/daviuk:/home/daviuk:ro
+      - ./podcasts:/app/podcasts
     depends_on:
       postgres:
         condition: service_healthy

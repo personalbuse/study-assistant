@@ -6,6 +6,7 @@ import DocumentList from './components/DocumentList'
 import FolderPicker from './components/FolderPicker'
 import Flashcards from './components/Flashcards'
 import QuizViewer from './components/QuizViewer'
+import PodcastViewer from './components/PodcastViewer'
 import api from './api/client'
 
 export default function App() {
@@ -136,6 +137,8 @@ export default function App() {
         {activeView === 'flashcards' && <Flashcards />}
 
         {activeView === 'quizzes' && <QuizViewer />}
+
+        {activeView === 'podcasts' && <PodcastViewer />}
       </main>
     </div>
   )

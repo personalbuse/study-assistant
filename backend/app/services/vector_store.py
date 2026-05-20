@@ -101,6 +101,23 @@ class VectorStore:
             ),
         )
 
+    def get_document_texts(self, document_id: int) -> list[str]:
+        from qdrant_client.http import models as qmodels
+
+        results = self.client.scroll(
+            collection_name=settings.collection_name,
+            scroll_filter=qmodels.Filter(
+                must=[
+                    qmodels.FieldCondition(
+                        key="document_id",
+                        match=qmodels.MatchValue(value=document_id),
+                    )
+                ]
+            ),
+            limit=1000,
+        )
+        return [hit.payload["text"] for hit in results[0]]
+
     def delete_all(self):
         self.client.delete_collection(settings.collection_name)
         self.embedding_dim = None

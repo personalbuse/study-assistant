@@ -15,7 +15,7 @@ def list_folders(db: Session = Depends(get_db)):
     folders = db.query(MonitoredFolder).all()
     return {
         "folders": [
-            {"path": f.folder_path, "created_at": f.created_at.isoformat()}
+            {"id": f.id, "path": f.folder_path, "created_at": f.created_at.isoformat()}
             for f in folders
         ]
     }

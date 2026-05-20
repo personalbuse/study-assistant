@@ -5,6 +5,7 @@ const navItems = [
   { id: 'chat', label: 'Chat IA' },
   { id: 'flashcards', label: 'Flashcards' },
   { id: 'quizzes', label: 'Quizzes' },
+  { id: 'podcasts', label: 'Podcasts' },
 ]
 
 export default function Sidebar({ activeView, onNavigate, folderCount, documentCount, theme, onToggleTheme }) {
@@ -43,6 +44,7 @@ export default function Sidebar({ activeView, onNavigate, folderCount, documentC
                 {item.id === 'chat' && <path d="M2 3a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6l-4 4V3z"/>}
                 {item.id === 'flashcards' && <path d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v4H4V4zm0 6h12v4H4v-4z"/>}
                 {item.id === 'quizzes' && <path d="M9 2a7 7 0 105.3 11.7l3.5 3.5a1 1 0 001.4-1.4l-3.5-3.5A7 7 0 009 2zm0 2a5 5 0 110 10A5 5 0 019 4zm-1 2v2H6v2h2v2h2v-2h2V8h-2V6H8z"/>}
+                {item.id === 'podcasts' && <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 110 12 6 6 0 010-12zM8 6.5v7l5.5-3.5L8 6.5z"/>}
               </svg>
             </span>
             <span>{item.label}</span>

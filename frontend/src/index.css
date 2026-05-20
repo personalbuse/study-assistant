@@ -4,28 +4,28 @@
 
 :root {
   --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-tertiary: #f3f4f6;
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
-  --border: #e5e7eb;
-  --accent: #1f2937;
-  --accent-hover: #374151;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f7f7f7;
+  --text-primary: #000000;
+  --text-secondary: #444444;
+  --text-muted: #999999;
+  --border: #e8e8e8;
+  --accent: #000000;
+  --accent-hover: #333333;
   --accent-text: #ffffff;
 }
 
 .dark {
   --bg-primary: #000000;
-  --bg-secondary: #111111;
-  --bg-tertiary: #1f1f1f;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --border: #1f1f1f;
-  --accent: #d1d5db;
-  --accent-hover: #e5e7eb;
-  --accent-text: #111827;
+  --bg-secondary: #000000;
+  --bg-tertiary: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #bbbbbb;
+  --text-muted: #555555;
+  --border: #1a1a1a;
+  --accent: #ffffff;
+  --accent-hover: #dddddd;
+  --accent-text: #000000;
 }
 
 body {

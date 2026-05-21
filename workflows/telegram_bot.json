@@ -206,6 +206,7 @@
           "method": "POST",
           "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendAudio",
           "sendBody": true,
+          "contentType": "multipart-form-data",
           "bodyParameters": {
             "parameters": [
               {
@@ -215,7 +216,7 @@
               },
               {
                 "name": "audio",
-                "value": "audioData",
+                "inputDataFieldName": "audioData",
                 "parameterType": "formBinaryData"
               }
             ]

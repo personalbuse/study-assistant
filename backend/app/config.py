@@ -6,9 +6,10 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     groq_api_key: str = ""
-    groq_chat_model: str = "llama-3.3-70b-versatile"
+    groq_chat_model: str = "llama-3.1-8b-instant"
     google_api_key: str = ""
-    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    tts_model: str = "gemini-2.5-flash-preview-tts"
     n8n_webhook_url: str = "http://localhost:5678/webhook"
     collection_name: str = "document_chunks"
     chunk_size: int = 1000
@@ -20,6 +21,9 @@ settings = Settings(
     qdrant_host=os.getenv("QDRANT_HOST", "localhost"),
     qdrant_port=int(os.getenv("QDRANT_PORT", "6333")),
     groq_api_key=os.getenv("GROQ_API_KEY", ""),
+    groq_chat_model=os.getenv("GROQ_CHAT_MODEL", "llama-3.1-8b-instant"),
     google_api_key=os.getenv("GOOGLE_API_KEY", ""),
+    embedding_model=os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-small"),
+    tts_model=os.getenv("TTS_MODEL", "gemini-2.5-flash-preview-tts"),
     n8n_webhook_url=os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook"),
 )

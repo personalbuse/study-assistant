@@ -47,7 +47,7 @@ Contenido:
 def synthesize_audio(turns: list[dict], podcast_id: int) -> str:
     script_text = "\n".join(f"{t['speaker']}: {t['text']}" for t in turns)
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.tts_model}:generateContent"
     params = {"key": settings.google_api_key}
 
     body = {

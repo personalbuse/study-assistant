@@ -123,8 +123,8 @@ Qdrant es:
 | Base de datos   | PostgreSQL 16 (Alpine)             |
 | Vector store    | Qdrant v1.18                       |
 | Embeddings      | fastembed 0.3.3 (local, offline)   |
-| LLM             | Groq API (`llama-3.3-70b-versatile`) |
-| TTS             | Google Gemini (`gemini-2.5-flash-preview-tts`) |
+| LLM             | Groq API (`llama-3.1-8b-instant`, configurable) |
+| TTS             | Google Gemini (`gemini-2.5-flash-preview-tts`, configurable) |
 | OCR             | Tesseract + pdf2image (para PPTX con imágenes) |
 | Procesamiento   | pypdf, pdfplumber, python-pptx, python-docx |
 | Audio           | pydub + ffmpeg (PCM→WAV→MP3) |
@@ -381,15 +381,26 @@ synthesize_audio(turns, podcast_id)
 ### Variables de Entorno (`.env`)
 
 ```env
+# API keys
 GROQ_API_KEY=gsk_tu_key_aqui
 GOOGLE_API_KEY=AIza_tu_key_aqui
 TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVwxyz
 TELEGRAM_OWNER_ID=123456789
 NGROK_AUTHTOKEN=2abc123def456
 NGROK_DOMAIN=midominio.ngrok-free.dev
+
+# Modelos (configurables)
+GROQ_CHAT_MODEL=llama-3.1-8b-instant
+EMBEDDING_MODEL=intfloat/multilingual-e5-small
+TTS_MODEL=gemini-2.5-flash-preview-tts
 ```
 
-Las primeras dos se pasan al backend, las de Telegram/ngrok al stack n8n + ngrok via `docker-compose.yml`.
+Las API keys se pasan al backend, las de Telegram/ngrok al stack n8n + ngrok via `docker-compose.yml`.
+
+Los modelos se pueden cambiar libremente en `.env`:
+- **`GROQ_CHAT_MODEL`**: cualquier modelo de Groq (ej. `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `mixtral-8x7b-32768`)
+- **`EMBEDDING_MODEL`**: cualquier modelo de `fastembed` (`sentence-transformers/*` o `intfloat/*`)
+- **`TTS_MODEL`**: modelos TTS de Gemini (`gemini-2.5-flash-preview-tts`)
 
 ### Levantar el Proyecto
 

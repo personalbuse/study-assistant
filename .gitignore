@@ -19,6 +19,9 @@ podcasts/
 backend/test_groq.py
 processed_hashes.json
 
+# Credential files with secrets
+workflows/*credential*.json
+
 # OS files
 .DS_Store
 Thumbs.db

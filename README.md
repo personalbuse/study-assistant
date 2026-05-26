@@ -1,160 +1,398 @@
 # Study Assistant — Asistente de Estudio Académico
 
-Asistente de estudio personal con procesamiento automatizado de documentos, chat con RAG (Retrieval-Augmented Generation), y generación de podcasts educativos. Todo corre localmente con Docker.
+Asistente de estudio personal con procesamiento automatizado de documentos, chat con RAG (Retrieval-Augmented Generation), generación de contenido educativo vía IA, y podcasts educativos. Todo orquestado con **n8n** y accesible desde **Telegram**.
+
+```
+                    ┌──────────────────────────────────────────────┐
+                    │          USUARIO (Telegram App)               │
+                    │   Celular / Desktop / Web                     │
+                    └──────────────────────┬───────────────────────┘
+                                           │  /docs list, /ask, /podcast gen
+                                           │  /create docs, /create podcast
+                                           ▼
+                    ┌──────────────────────────────────────────────┐
+                    │         n8n (Workflow Automation)             │
+                    │  Telegram Trigger → Is Owner? → Route Command │
+                    │                                              │
+                    │  10 rutas: welcome, help, docs, folders,     │
+                    │  podcast (gen + gen_folder), ask (RAG),      │
+                    │  create (docs + podcast), fallback           │
+                    └──────────────────────┬───────────────────────┘
+                                           │ HTTP (red interna Docker)
+                                           ▼
+                    ┌──────────────────────────────────────────────┐
+                    │   Backend FastAPI (Python 3.12)               │
+                    │   study-backend:8000                          │
+                    │                                              │
+                    │  routers/ ──── services/                      │
+                    │  ├─ documents  ├─ groq_service (Groq LLM)    │
+                    │  ├─ chat       ├─ embeddings (fastembed)     │
+                    │  ├─ monitor    ├─ vector_store (Qdrant)      │
+                    │  ├─ podcasts   ├─ podcast_service (TTS)      │
+                    │  ├─ content    ├─ content_generator          │
+                    │  └─ create     └─ extractor / chunker        │
+                    └────┬──────┬──────┬───────────────────────────┘
+                         │      │      │
+                    ┌────┘      │      └─────┐
+                    ▼           ▼            ▼
+              ┌──────────┐ ┌──────────┐ ┌──────────┐
+              │PostgreSQL│ │  Qdrant  │ │   APIs   │
+              │ (datos   │ │(vectores)│ │ Externas  │
+              │  relac.) │ │ 384-dim  │ │ Groq     │
+              │          │ │ coseno   │ │ Gemini   │
+              └──────────┘ └──────────┘ └──────────┘
+```
 
 ---
 
 ## Arquitectura General
 
+El sistema consta de **5 servicios Docker** en una red bridge `study-net`:
+
+| Servicio   | Puerto | Propósito |
+|------------|--------|-----------|
+| **n8n**    | 5678   | Orquestación visual de workflows |
+| **backend**| 8000   | API FastAPI con toda la lógica de negocio |
+| **postgres**| 5433  | Base de datos relacional (documentos, chats, podcasts) |
+| **qdrant** | 6333   | Base de datos vectorial (embeddings semánticos) |
+| **ngrok**  | —      | Túnel HTTPS público a n8n |
+
+**Comunicación entre servicios:**
+- `n8n ──HTTP──► backend` (http://backend:8000/api/...)
+- `backend ──SQL──► postgres` (postgres:5432)
+- `backend ──gRPC──► qdrant` (qdrant:6333)
+- `backend ──HTTP──► Groq API` (api.groq.com)
+- `backend ──HTTP──► Gemini TTS` (generativelanguage.googleapis.com)
+
+### Stack Tecnológico
+
+| Componente       | Tecnología |
+|------------------|------------|
+| Orquestación     | n8n 2.21.4 (Self Hosted) |
+| API Backend      | FastAPI (Python 3.12) |
+| ORM              | SQLAlchemy 2.0 |
+| Base de datos    | PostgreSQL 16 (Alpine) |
+| Vector Store     | Qdrant v1.18 |
+| Embeddings       | fastembed 0.3.3 (local, offline, 384-dim, multilingüe) |
+| LLM              | Groq API (`llama-3.1-8b-instant`, configurable) |
+| TTS              | Google Gemini (`gemini-2.5-flash-preview-tts`, configurable) |
+| OCR              | Tesseract + pdf2image (español, para PPTX con imágenes) |
+| Extracción       | pdfplumber, python-pptx, python-docx |
+| Audio            | pydub + ffmpeg (PCM → WAV → MP3) |
+| Túnel HTTPS      | ngrok (dominio fijo gratuito) |
+| Contenedores     | Docker Compose |
+
+---
+
+## Componentes del Sistema
+
+### n8n — Orquestador de Workflows
+
+n8n actúa como el **router** entre el usuario (Telegram) y el backend. Su función es:
+
+- **Recibir mensajes** de Telegram vía polling cada 500ms
+- **Autorizar** al usuario (filtro por chat ID del dueño)
+- **Enrutar** cada comando al procesador correcto (switch con 10 reglas)
+- **Formatear respuestas** (convierte JSON a HTML)
+- **Enviar respuestas** de vuelta a Telegram (texto y audio MP3)
+- **Descargar archivos** de audio del backend y reenviarlos a Telegram
+- **Manejar paginación** (extrae números de página de los comandos)
+
+n8n **no** procesa documentos, ni genera contenido, ni busca en la BD vectorial — delega todo eso al backend.
+
+### Backend FastAPI — Lógica de Negocio
+
+API REST con todos los servicios de procesamiento:
+
+- **Documentos**: extracción de texto (PDF/PPTX/DOCX/MD/TXT), chunking, embeddings, almacenamiento vectorial
+- **Chat RAG**: búsqueda semántica en Qdrant + Groq LLM para responder preguntas con contexto
+- **Podcasts**: generación de guiones conversacionales (Groq) + síntesis de voz (Gemini TTS)
+- **Contenido educativo**: creación automática de documentos markdown sobre cualquier tema (Groq)
+- **Monitoreo**: watchdog de carpetas para procesamiento automático de archivos nuevos
+
+### PostgreSQL — Datos Relacionales
+
+Almacena: documentos, carpetas monitoreadas, mensajes de chat, podcasts, resúmenes, flashcards, quizzes.
+
+### Qdrant — Base de Datos Vectorial
+
+Almacena **embeddings** (vectores de 384 dimensiones) de fragmentos de documentos. Permite búsqueda semántica por similitud coseno.
+
+### Groq — LLM
+
+Se usa para:
+- Responder preguntas en el chat RAG
+- Generar resúmenes, flashcards, quizzes
+- Escribir guiones de podcasts (formato conversacional HostA/HostB)
+- Crear documentos educativos desde cero
+
+### Gemini TTS — Texto a Voz
+
+Toma el guión del podcast y genera audio MP3 con voz natural (modelo `gemini-2.5-flash-preview-tts`).
+
+### ngrok — Túnel HTTPS
+
+Expone n8n a internet con dominio fijo para que Telegram pueda enviar webhooks. Actualmente el bot usa **polling** (n8n consulta activamente), por lo que ngrok es opcional para el funcionamiento básico.
+
+---
+
+## Flujo del Bot de Telegram
+
+### Diagrama de Nodos (30 nodos en total)
+
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        Host (tu PC)                          │
-│                                                              │
-│  ┌──────────┐   ┌──────────┐   ┌────────────────────┐       │
-│  │ Electron │   │ Frontend │   │ watcher_host.py    │       │
-│  │ (ventana)│◄─►│ (Vite +  │   │ (watchdog nativo)  │       │
-│  │          │   │  React)  │   │                    │       │
-│  └──────────┘   └────┬─────┘   └─────────┬──────────┘       │
-│                      │                   │                  │
-│                  :5173               llama a webhook        │
-│                      │                   │                  │
-└──────────────────────┼───────────────────┼──────────────────┘
-                       │                   │
-                  HTTP │               HTTP│
-                       ▼                   ▼
-              ┌─────────────────────────────────────┐
-              │          Docker Network              │
-              │          study-net                   │
-              │                                      │
-              │  ┌─────────┐   ┌──────────────┐     │
-              │  │ Backend │──►│ PostgreSQL   │     │
-              │  │ FastAPI  │   │ (metadatos)  │     │
-              │  │ :8000   │   └──────────────┘     │
-              │  │         │   ┌──────────────┐     │
-              │  │         │──►│ Qdrant       │     │
-              │  │         │   │ (vectores)   │     │
-              │  └────┬────┘   └──────────────┘     │
-              │       │                             │
-              │  ┌────▼────┐    ┌──────────────┐    │
-              │  │ n8n     │◄──►│ ngrok        │    │
-              │  │ :5678   │    │ (túnel TLS)  │    │
-              │  └─────────┘    └──────┬───────┘    │
-              └───────────────────────┼─────────────┘
-                          │           │
-                     APIs │      HTTPS│ Webhook
-                     ext. │           │ Telegram
-                          ▼           ▼
-                 ┌──────────────┐  ┌──────────┐
-                 │  Groq (LLM)  │  │ Telegram │
-                 │ llama-3.3-70b│  │ Bot API  │
-                 ├──────────────┤  └──────────┘
-                 │ Gemini TTS   │
-                 │ (podcast)    │
-                 └──────────────┘
+                         ┌─────────────────────┐
+                         │   Telegram Trigger   │
+                         │  (polling c/500ms)  │
+                         └──────────┬──────────┘
+                                    │ $json.message
+                                    ▼
+                         ┌─────────────────────┐
+                         │     Is Owner?        │
+                         │ chat.id == OWNER_ID? │
+                         └────┬────────┬───────┘
+                         Sí   │        │  No
+                              │        │  (mensaje ignorado)
+                              ▼
+                         ┌─────────────────────┐
+                         │    Route Command     │
+                         │  (Switch, 10 reglas  │
+                         │   + fallback)        │
+                         └──┬──┬──┬──┬──┬──┬──┐
+                            │  │  │  │  │  │  │
+        ┌───────────────────┘  │  │  │  │  │  └────────────┐
+        │   ┌──────────────────┘  │  │  │  └──────┐        │
+        │   │   ┌─────────────────┘  │  └───┐     │        │
+        │   │   │   ┌────────────────┘      │     │        │
+        ▼   ▼   ▼   ▼         ▼       ▼     ▼     ▼        ▼
+      [0]  [1] [2] [3]     [4][5]   [6]    [7]  [8][9]   [10]
+     Send Send Ext. Ext.   Send    Prep.  Send  Ext.    Send
+    Welco Help Docs Fol.   Gen.    Chat   Pod.  Docs/   Help
+                 Params P.         Body   Help  Pod.   (fallback)
+                  │      │          │            Topic
+                  ▼      ▼          ▼              │
+               List   List       Chat       ┌──────┴──────┐
+              Docs   Folders     Ask        │              │
+                  │      │        │         ▼              ▼
+                  ▼      ▼        ▼      Create         Create
+             Format  Format    Send      Docs           Podcast
+              Docs   Folders  Answer        │              │
+                  │      │                   ▼              ▼
+                  ▼      ▼               Send          Download
+             Send     Send             Create           Audio
+             Docs    Folders          Confirm              │
+             List    List                                 ▼
+                                                  Send Audio Direct
+```
+
+### Reglas del Enrutador (Route Command)
+
+| Índice | Regla | Tipo | Comando | Acción |
+|--------|-------|------|---------|--------|
+| 0 | empieza con `/start` | startsWith | Bienvenida | Send Welcome |
+| 1 | empieza con `/help` | startsWith | Ayuda | Send Help |
+| 2 | `^/docs list` | regex | Listar docs | HTTP GET `/api/documents` |
+| 3 | `^/docs folders` | regex | Listar carpetas | HTTP GET `/api/monitor/folders` |
+| 4 | `^/podcast gen(?:erate)? \d+` | regex | Podcast por ID | HTTP POST `/api/podcasts/by-document/{id}` |
+| 5 | `^/podcast gen_folder` | regex | Podcast por carpeta | HTTP POST `/api/podcasts/by-folder-path` |
+| 6 | empieza con `/ask` | startsWith | Pregunta RAG | HTTP POST `/api/chat/ask` |
+| 7 | empieza con `/podcast` | startsWith | Ayuda podcast | Send Podcast Help |
+| 8 | `^/create docs` | regex | Crear documento | HTTP POST `/api/create/docs` |
+| 9 | `^/create podcast` | regex | Crear podcast | HTTP POST `/api/create/podcast` |
+| 10 | fallback | — | No reconocido | Send Help |
+
+### Flujo de Cada Comando
+
+#### `/start` → Mensaje de Bienvenida
+
+```
+Usuario: /start
+  → Route Command [0] → Send Welcome
+  → "🎓 ¡Bienvenido a StudiedUp!..."
+```
+
+#### `/help` → Lista de Comandos
+
+```
+Usuario: /help
+  → Route Command [1] → Send Help
+  → Lista completa con ejemplos
+```
+
+#### `/docs list [página]` → Documentos Disponibles
+
+```
+Usuario: /docs list 2
+  → Route Command [2] → Extract Docs Params
+     Extrae página (default: 1, page_size: 10)
+  → List Documents
+     HTTP GET http://backend:8000/api/documents?page=2&page_size=10
+  → Format Docs List (convierte JSON a HTML)
+  → Send Docs List
+```
+
+**Backend**: Consulta PostgreSQL con paginación (`LIMIT 10 OFFSET 10`). Devuelve `{items[], total, page, page_size}`.
+
+#### `/docs folders [página]` → Carpetas Monitoreadas
+
+```
+Usuario: /docs folders 1
+  → Route Command [3] → Extract Folders Params
+  → List Folders
+     HTTP GET http://backend:8000/api/monitor/folders?page=1&page_size=10
+  → Format Folders List → Send Folders List
+```
+
+#### `/podcast gen <ID>` → Podcast de un Documento
+
+```
+Usuario: /podcast gen 5
+  → Route Command [4] → Send Generating ("🎙️ Generando podcast... ⏳")
+  → Extract Doc ID (extrae el número 5)
+  → Generate Podcast
+     HTTP POST http://backend:8000/api/podcasts/by-document/5
+  → Download Audio
+     HTTP GET http://backend:8000/api/podcasts/<id>/audio (arraybuffer)
+  → Send Audio Direct
+     HTTP POST https://api.telegram.org/bot<TOKEN>/sendAudio (multipart)
+```
+
+**Backend**: Recupera fragmentos del documento desde Qdrant → Groq genera guión (HostA/HostB) → Gemini TTS sintetiza audio MP3 → Guarda en `/app/podcasts/`.
+
+#### `/podcast gen_folder <ruta>` → Podcast de Carpeta
+
+```
+Usuario: /podcast gen_folder /home/daviuk/materias/redes
+  → Route Command [5] → Send Generating Folder
+  → Extract Folder Name → { folder_path: "/home/daviuk/materias/redes" }
+  → Generate Podcast by Folder
+     HTTP POST http://backend:8000/api/podcasts/by-folder-path
+     Body: { "folder_path": "/home/daviuk/materias/redes" }
+  → Download Audio → Send Audio Direct
+```
+
+**Backend**: Busca todos los documentos en esa ruta, combina sus textos, genera guión + audio.
+
+#### `/ask <pregunta>` → Chat RAG
+
+```
+Usuario: /ask ¿Qué es el modelo OSI?
+  → Route Command [6] → Prepare Chat Body
+     Extrae: "¿Qué es el modelo OSI?"
+  → Chat Ask
+     HTTP POST http://backend:8000/api/chat/ask
+     Body: { "message": "¿Qué es el modelo OSI?" }
+  → Send Answer
+```
+
+**Backend (RAG)**:
+```
+Pregunta → fastembed (vector 384-dim)
+         → Qdrant (búsqueda coseno, top 20 fragmentos)
+         → Groq LLM (contexto + pregunta → respuesta)
+         → PostgreSQL (guarda historial)
+         → Respuesta al usuario
+```
+
+#### `/create docs <tema>` → Crear Documento con IA
+
+```
+Usuario: /create docs seguridad informática
+  → Route Command [8] → Extract Create Docs Topic
+     Extrae: "seguridad informática"
+  → Create Docs
+     HTTP POST http://backend:8000/api/create/docs
+     Body: { "topic": "seguridad informática" }
+  → Send Create Confirm
+     "Documento creado. ID: 42, ruta: /documents/created/seguridad-informatica/..."
+```
+
+**Backend**: Groq genera documento markdown (1500+ palabras) → Guarda en `/documents/created/<slug>/` → Chunkea → Embeddings → Qdrant.
+
+#### `/create podcast <tema>` → Crear Podcast con IA
+
+```
+Usuario: /create podcast ISO 27001
+  → Route Command [9] → Extract Create Podcast Topic
+  → Create Podcast
+     HTTP POST http://backend:8000/api/create/podcast
+     Body: { "topic": "ISO 27001" }
+  → Download Audio → Send Audio Direct
+```
+
+**Backend**: Genera documento educativo → Usa ese texto como fuente → Genera guión (Groq) → Sintetiza audio (Gemini TTS) → Devuelve podcast.
+
+#### Fallback → Ayuda General
+
+```
+Usuario: /cualquiercosanoexistente
+  → Route Command [10] → Send Help
+  → Lista de comandos disponibles
+```
 
 ---
 
-## ¿Por qué n8n?
+## API Endpoints — Backend
 
-| Problema                        | Solución con n8n                            |
-|--------------------------------|----------------------------------------------|
-| Procesamiento de documentos es lento y bloquea el backend | Se delega a n8n como workflow asíncrono |
-| Se necesita reintentar con backoff ante errores | n8n maneja retry logic nativamente |
-| Extracción de texto + chunking + embedding en tándem | Flujo visual encadenado |
-| El frontend no debe esperar a que termine | Webhook HTTP → n8n procesa → callback al backend |
+### Documentos (`/api/documents`)
 
-n8n actúa como **orquestador de procesamiento**. Cuando un documento llega:
-1. Backend extrae texto (rápido) y guarda metadata en PostgreSQL
-2. Backend envía texto a n8n via webhook interno (`POST /webhook/process-document`)
-3. n8n ejecuta un workflow que:
-   - Recibe el texto
-   - Puede aplicar transformaciones adicionales
-   - Llama al endpoint `/api/documents/n8n-chunks` del backend para guardar los chunks vectorizados en Qdrant
-4. Backend marca el documento como `processed`
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/` | Listar documentos (query: `page`, `page_size`) |
+| `GET` | `/{id}` | Obtener documento por ID |
+| `POST` | `/process?filepath=` | Procesar archivo (extraer + chunk + embed + n8n) |
+| `POST` | `/process-folder?folder_path=` | Procesar todos los archivos de una carpeta |
+| `POST` | `/sync` | Sincronizar carpetas monitoreadas |
+| `POST` | `/n8n-chunks` | Webhook para que n8n guarde chunks |
+| `POST` | `/n8n-webhook` | Webhook alternativo para n8n |
+| `DELETE` | `/{id}` | Eliminar documento + chunks vectoriales |
 
-El workflow `file_watcher.json` se activa desde un script Python (`watcher_host.py`) que corre en el **host** (no dentro de Docker) usando `watchdog` para detectar archivos nuevos en carpetas monitoreadas.
+### Chat (`/api/chat`)
 
-n8n también orquesta el **bot de Telegram** (`workflows/telegram_bot.json`):
-1. Recibe mensajes vía webhook (ngrok → n8n)
-2. Filtra por owner y rutea por comando
-3. Para `/ask`: envía la pregunta al backend FastAPI (RAG con Qdrant + Groq)
-4. Para `/podcast gen`: llama al backend, que genera guion (Groq) y audio (Gemini TTS)
-5. Devuelve respuestas de texto o archivos MP3 al usuario por Telegram
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/ask` | Pregunta RAG (body: `{ message }`) |
+| `GET` | `/history` | Historial de mensajes |
 
-### Workflows incluidos
+### Monitor (`/api/monitor`)
 
-| Archivo | Propósito |
-|---------|-----------|
-| `workflows/file_watcher.json` | Webhook de entrada desde watcher_host.py → envía a backend |
-| `workflows/process_document.json` | Procesamiento de documentos (v1, más simple) |
-| `workflows/process_document_v2.json` | Procesamiento mejorado con manejo de errores |
-| `workflows/telegram_bot.json` | Bot de Telegram: RAG chat y generación de podcasts |
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/folders` | Listar carpetas (query: `page`, `page_size`) |
+| `POST` | `/folders` | Agregar carpeta (body: `{ path }`) |
+| `DELETE` | `/folders` | Eliminar carpeta + cascade delete |
 
----
+### Contenido (`/api/content`)
 
-## ¿Por qué Qdrant?
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST/GET` | `/summaries/{id}` | Generar/obtener resumen |
+| `POST/GET` | `/flashcards/{id}` | Generar/obtener flashcards |
+| `POST/GET` | `/quizzes/{id}` | Generar/obtener quiz |
 
-| Alternativa     | Problema                                      |
-|----------------|------------------------------------------------|
-| pgvector       | Requiere extensión PostgreSQL, no aislado     |
-| Pinecone       | Servicio en la nube, requiere API key, costos |
-| ChromaDB       | Menos maduro, sin persistencia robusta        |
-| Weaviate       | Más pesado, overkill para single-user         |
+### Podcasts (`/api/podcasts`)
 
-Qdrant es:
-- **Ligero** — imagen Docker de ~60MB, corre con 256MB RAM
-- **Rápido** — búsqueda coseno en 384 dimensiones en milisegundos
-- **Persistente** — monta volumen para no perder datos
-- **API REST** — se comunica con el backend via HTTP en el puerto 6333
-- **Filtros** — soporta filtrado por `document_id` para eliminar chunks de un documento específico
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/by-document/{id}` | Generar podcast de un documento |
+| `POST` | `/by-folder/{id}` | Generar podcast de carpeta monitoreada |
+| `POST` | `/by-folder-path` | Generar podcast por ruta (body: `{ folder_path }`) |
+| `GET` | `/` | Listar podcasts |
+| `GET` | `/{id}/audio` | Descargar audio MP3 |
+| `DELETE` | `/{id}` | Eliminar podcast + archivo |
 
-**Embeddings**: Se usa `fastembed` (biblioteca local, sin GPU) con el modelo `paraphrase-multilingual-MiniLM-L12-v2` que produce vectores de 384 dimensiones. Corre completamente offline.
+### Creación con IA (`/api/create`)
 
----
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/docs` | Crear documento educativo (body: `{ topic }`) |
+| `POST` | `/podcast` | Crear podcast desde cero (body: `{ topic }`) |
 
-## Stack Tecnológico
+### Health
 
-### Backend (`backend/`)
-
-| Componente       | Tecnología                         |
-|-----------------|------------------------------------|
-| Framework API   | FastAPI (Python 3.12)              |
-| ORM             | SQLAlchemy 2.0                     |
-| Base de datos   | PostgreSQL 16 (Alpine)             |
-| Vector store    | Qdrant v1.18                       |
-| Embeddings      | fastembed 0.3.3 (local, offline)   |
-| LLM             | Groq API (`llama-3.1-8b-instant`, configurable) |
-| TTS             | Google Gemini (`gemini-2.5-flash-preview-tts`, configurable) |
-| OCR             | Tesseract + pdf2image (para PPTX con imágenes) |
-| Procesamiento   | pypdf, pdfplumber, python-pptx, python-docx |
-| Audio           | pydub + ffmpeg (PCM→WAV→MP3) |
-
-### Frontend (`frontend/`)
-
-| Componente   | Tecnología                    |
-|-------------|-------------------------------|
-| Framework   | React 18 + Vite              |
-| Estilos     | Tailwind CSS + CSS variables |
-| HTTP client | Axios                        |
-| Empaquetado | Vite 5                       |
-
-### Desktop (`electron/`)
-
-| Componente   | Tecnología         |
-|-------------|-------------------|
-| Ventana     | Electron          |
-| IPC         | contextBridge + ipcRenderer |
-| Folder picker | `dialog.showOpenDialog` |
-
-### Infraestructura
-
-| Componente | Tecnología                          |
-|-----------|-------------------------------------|
-| Contenedores | Docker Compose                    |
-| Red interna  | `study-net` (bridge)              |
-| Orquestación | n8n (workflows visuales)          |
-| Túnel HTTPS  | ngrok (para webhook Telegram)     |
-| Bot Telegram | BotFather + Telegram Bot API      |
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/health` | `{"status":"ok","service":"study-assistant"}` |
 
 ---
 
@@ -164,108 +402,37 @@ Qdrant es:
 backend/
 ├── Dockerfile
 ├── requirements.txt
-├── watcher_host.py          # Script host-side para watch de carpetas
+├── watcher_host.py           # Script host-side para watchdog de carpetas
+├── scripts/init_db.py        # Creación de tablas
+├── podcasts/                 # Audios generados
 └── app/
-    ├── main.py               # FastAPI app, CORS, rutas
-    ├── config.py             # Settings (GROQ_API_KEY, GOOGLE_API_KEY, etc.)
-    ├── database.py           # SQLAlchemy engine + session
-    ├── schemas/
-    │   └── schemas.py        # Pydantic models (request/response)
+    ├── main.py               # FastAPI app + CORS + rutas
+    ├── config.py             # Settings (Pydantic, desde .env)
+    ├── database.py           # SQLAlchemy engine/session
+    ├── schemas/schemas.py    # Pydantic request/response
     ├── models/
     │   ├── document.py       # Document, MonitoredFolder
     │   ├── chat.py           # ChatMessage
     │   ├── quiz.py           # Summary, Flashcard, Quiz
     │   └── podcast.py        # Podcast
     ├── routers/
-    │   ├── documents.py      # CRUD documentos, sync, process, webhooks n8n
-    │   ├── chat.py           # /api/chat/ask (RAG), /api/chat/history
+    │   ├── documents.py      # CRUD docs, sync, process, webhooks n8n
+    │   ├── chat.py           # /api/chat/ask (RAG), /history
     │   ├── monitor.py        # /api/monitor/folders (CRUD)
     │   ├── content.py        # /api/content/summaries, /flashcards, /quizzes
-    │   └── podcasts.py       # /api/podcasts (by-document, by-folder, audio)
+    │   ├── podcasts.py       # /api/podcasts (by-document, by-folder, audio)
+    │   └── create.py         # /api/create/docs, /api/create/podcast
     └── services/
-        ├── embeddings.py     # fastembed wrapper (singleton)
+        ├── embeddings.py     # fastembed wrapper (singleton, offline)
         ├── vector_store.py   # Qdrant client (store, search, delete, scroll)
-        ├── extractor.py      # PDF/PPTX/DOCX/TXT/MD → texto (con OCR)
-        ├── chunker.py        # Texto → chunks de ~500 palabras con overlap
-        ├── groq_service.py   # Groq API wrapper (chat, summaries, quiz, flashcards)
-        ├── podcast_service.py# Groq script gen + Gemini TTS synthesis
-        ├── n8n_trigger.py    # HTTP call to n8n webhook
+        ├── extractor.py      # PDF/PPTX/DOCX/TXT/MD → texto con OCR
+        ├── chunker.py        # Texto → chunks ~500 chars con overlap
+        ├── groq_service.py   # Groq API (chat, summary, quiz, flashcards)
+        ├── podcast_service.py# Guión (Groq) + TTS (Gemini) → MP3
+        ├── content_generator.py # Creación de documentos educativos con Groq
+        ├── n8n_trigger.py    # HTTP call a webhook de n8n
         └── file_watcher.py   # watchdog observer (in-container)
 ```
-
-### API Endpoints
-
-**Documentos** (`/api/documents`)
-- `GET /` — Listar documentos
-- `GET /{id}` — Obtener documento por ID
-- `POST /process?filepath=` — Procesar archivo (extraer + chunk + store + n8n)
-- `POST /process-folder?folder_path=` — Procesar todos los archivos de una carpeta
-- `POST /sync` — Sincronizar desde carpetas monitoreadas (agrega nuevos, elimina huérfanos)
-- `POST /n8n-chunks` — Webhook para que n8n guarde chunks procesados
-- `POST /n8n-webhook` — Webhook alternativo para n8n
-- `DELETE /{id}` — Eliminar documento + sus chunks vectoriales
-
-**Chat** (`/api/chat`)
-- `POST /ask` — Pregunta con RAG (search Qdrant → contexto → Groq)
-- `GET /history` — Historial de mensajes
-
-**Monitor** (`/api/monitor`)
-- `GET /folders` — Listar carpetas monitoreadas
-- `POST /folders` — Agregar carpeta
-- `DELETE /folders` — Eliminar carpeta (cascade-delete documentos + chunks)
-
-**Contenido** (`/api/content`)
-- `POST /summaries/{id}` / `GET /summaries/{id}` — Resumen
-- `POST /flashcards/{id}` / `GET /flashcards/{id}` — Flashcards
-- `POST /quizzes/{id}` / `GET /quizzes/{id}` — Quiz (con preguntas de opción múltiple)
-
-**Podcasts** (`/api/podcasts`)
-- `POST /by-document/{id}` — Generar podcast de un documento
-- `POST /by-folder/{id}` — Generar podcast de toda una carpeta
-- `GET /` — Listar podcasts
-- `GET /{id}/audio` — Descargar audio (MP3 o WAV)
-- `DELETE /{id}` — Eliminar podcast + archivo de audio
-
----
-
-## Estructura del Frontend
-
-```
-frontend/
-├── package.json
-├── vite.config.js           # Proxy /api → localhost:8000
-└── src/
-    ├── main.jsx             # Entry point React
-    ├── App.jsx              # Router de vistas, theme toggle, state global
-    ├── index.css            # Tema CSS variables (light/dark)
-    ├── api/
-    │   └── client.js        # Axios instance
-    └── components/
-        ├── Sidebar.jsx      # Navegación lateral (7 vistas + theme toggle)
-        ├── Dashboard.jsx    # Vista principal con cards resumen
-        ├── DocumentList.jsx # Lista de documentos procesados
-        ├── FolderPicker.jsx # Gestión de carpetas monitoreadas
-        ├── ChatWindow.jsx   # Chat con RAG (pregunta → contexto → respuesta)
-        ├── Flashcards.jsx   # Flashcards por documento
-        ├── QuizViewer.jsx   # Quiz interactivo por documento
-        └── PodcastViewer.jsx# Podcasts con 2 tabs (documento/carpeta) y audio player
-```
-
-### Vistas (7)
-
-| Vista       | Componente       | Descripción                                    |
-|-------------|------------------|------------------------------------------------|
-| Dashboard   | Dashboard        | Resumen: docs, carpetas, links rápidos         |
-| Documentos  | DocumentList     | Tabla con nombre, tipo, estado, fecha          |
-| Carpetas    | FolderPicker     | Agregar/quitar carpetas monitoreadas + sync    |
-| Chat        | ChatWindow       | Conversación RAG con contexto de documentos   |
-| Flashcards  | Flashcards       | Tarjetas de estudio por documento              |
-| Quizzes     | QuizViewer       | Preguntas de opción múltiple por documento     |
-| Podcasts    | PodcastViewer    | Generar y escuchar podcasts                    |
-
-### Tema
-
-CSS variables puras sin dependencias de theming. Light mode: fondo blanco (#ffffff), texto negro (#000000). Dark mode: fondo negro (#000000), texto blanco (#ffffff). Escala de grises neutros — cero tonos azules o slate.
 
 ---
 
@@ -277,54 +444,41 @@ CSS variables puras sin dependencias de theming. Light mode: fondo blanco (#ffff
 Archivo (PDF/PPTX/DOCX/MD/TXT)
     │
     ▼
-watcher_host.py (detecta en host)
+extract_text()
+    ├── PDF: pdfplumber → texto por página
+    ├── PPTX: python-pptx → texto slides + OCR imágenes (Tesseract español)
+    ├── DOCX: python-docx → párrafos + tablas
+    └── TXT/MD: lectura directa
     │
-    ├──► n8n webhook (workflow file_watcher)
-    │       │
-    │       └──► Backend /api/documents/process
-    │               │
-    ▼               ▼
-        extract_text()
-            │
-            ├── PDF: pdfplumber → texto por página
-            ├── PPTX: python-pptx → texto slides + OCR imágenes
-            ├── DOCX: python-docx → párrafos + tablas
-            └── TXT/MD: lectura directa
-            │
-            ▼
-        chunk_document()
-            │
-            ├── Divide en fragmentos de ~500 palabras
-            ├── Overlap de 50 palabras entre chunks
-            └── Detecta saltos de página/diapositiva
-            │
-            ▼
-        vector_store.store_chunks()
-            │
-            ├── fastembed → vector 384-dim por chunk
-            └── Qdrant upsert (payload: document_id, filename, page, text)
-            │
-            ▼
-        trigger_n8n_workflow()
-            │
-            └── n8n procesa asíncronamente, callback a /n8n-chunks
+    ▼
+chunk_document()
+    ├── Divide en fragmentos de ~500 caracteres
+    ├── Overlap de 50 caracteres
+    └── Detecta saltos de página/diapositiva
+    │
+    ▼
+vector_store.store_chunks()
+    ├── fastembed → vector 384-dim por chunk
+    └── Qdrant upsert con payload: document_id, filename, page, text
+    │
+    ▼
+trigger_n8n_workflow()
+    └── Webhook a n8n para procesamiento asíncrono
 ```
 
-### Chat con RAG
+### Chat RAG
 
 ```
 Pregunta del usuario
     │
     ▼
 vector_store.search(query, top_k=20)
-    │
-    ├── fastembed → vector de la pregunta
-    └── Qdrant búsqueda coseno → top 20 chunks relevantes
+    ├── fastembed → vector 384-dim
+    └── Qdrant búsqueda coseno → 20 fragmentos más relevantes
     │
     ▼
 ask_groq(prompt con contexto + pregunta)
-    │
-    ├── Groq llama-3.3-70b-versatile
+    ├── Groq llama-3.1-8b-instant
     └── Respuesta detallada en español
     │
     ▼
@@ -337,31 +491,83 @@ Devuelve respuesta + fuentes (filename, page, score)
 ### Podcast
 
 ```
-Seleccionar documento o carpeta
+Seleccionar documento, carpeta, o tema nuevo
     │
     ▼
-vector_store.get_document_texts(document_id)
+vector_store.get_document_texts(document_id)  [o contenido generado]
     │
     ├── Qdrant scroll filter por document_id
     └── Recupera todos los chunks de texto
     │
     ▼
 generate_podcast_script(texts)
-    │
-    ├── Groq genera guion conversacional (HostA + HostB)
+    ├── Groq genera guión conversacional (HostA + HostB)
     └── JSON con turns: [{speaker, text}, ...]
     │
     ▼
 synthesize_audio(turns, podcast_id)
-    │
     ├── Gemini TTS (gemini-2.5-flash-preview-tts)
     │   POST generateContent con responseModalities: ["AUDIO"]
-    │   Voz: star name (ej: "zephyr")
+    │   Voz: "zephyr"
     ├── Decodifica PCM 24kHz 16-bit mono
     ├── Guarda como WAV
     ├── Convierte a MP3 con pydub + ffmpeg
-    └── Duración real calculada: bytes / (24000 × 2)
+    └── Duración real calculada
 ```
+
+### Creación de Contenido con IA
+
+```
+Tema del usuario (ej: "seguridad informática")
+    │
+    ▼
+content_generator.generate_document_content(topic)
+    ├── Groq genera documento markdown (1500+ palabras)
+    │   Prompt: título, introducción, conceptos, desarrollo, ejemplos, conclusión
+    │   Tono: académico pero accesible
+    │
+    ▼
+Guarda archivo en /documents/created/<slug>/<slug>.md
+    │
+    ▼
+Chunk → Embeddings → Qdrant (misma pipeline que documentos)
+    │
+    ▼
+Crea registro en PostgreSQL
+```
+
+---
+
+## Infraestructura (Docker Compose)
+
+```yaml
+# docker-compose.yml — 5 servicios
+services:
+  postgres:   # PostgreSQL 16 Alpine, puerto 5433
+  qdrant:     # Qdrant v1.18, puertos 6333/6334
+  n8n:        # n8n latest, puerto 5678
+  backend:    # FastAPI build local, puerto 8000
+  ngrok:      # ngrok latest, túnel HTTPS
+```
+
+### Variables de Entorno (`.env`)
+
+```env
+# APIs
+GROQ_API_KEY=gsk_tu_key
+GOOGLE_API_KEY=AIza_tu_key
+TELEGRAM_BOT_TOKEN=1234567890:ABCdef...
+TELEGRAM_OWNER_ID=123456789
+NGROK_AUTHTOKEN=2abc123...
+NGROK_DOMAIN=midominio.ngrok-free.dev
+
+# Modelos (configurables)
+GROQ_CHAT_MODEL=llama-3.1-8b-instant
+EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+TTS_MODEL=gemini-2.5-flash-preview-tts
+```
+
+**Nota:** Los modelos son completamente configurables. Cambia las variables en `.env` y recrea los contenedores con `docker compose up -d --force-recreate backend`.
 
 ---
 
@@ -370,37 +576,7 @@ synthesize_audio(turns, podcast_id)
 ### Prerequisitos
 
 - Docker + Docker Compose
-- Node.js 18+ (para frontend y Electron)
-- Python 3.10+ (para watcher_host.py)
-- API keys:
-  - Groq: https://console.groq.com (modelo usado: `llama-3.3-70b-versatile`)
-  - Google: https://aistudio.google.com (para Gemini TTS, modelo: `gemini-2.5-flash-preview-tts`)
-  - Telegram: crear bot con [BotFather](https://t.me/BotFather) y obtener token
-  - ngrok: cuenta gratuita en https://ngrok.com (para túnel HTTPS al bot)
-
-### Variables de Entorno (`.env`)
-
-```env
-# API keys
-GROQ_API_KEY=gsk_tu_key_aqui
-GOOGLE_API_KEY=AIza_tu_key_aqui
-TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVwxyz
-TELEGRAM_OWNER_ID=123456789
-NGROK_AUTHTOKEN=2abc123def456
-NGROK_DOMAIN=midominio.ngrok-free.dev
-
-# Modelos (configurables)
-GROQ_CHAT_MODEL=llama-3.1-8b-instant
-EMBEDDING_MODEL=intfloat/multilingual-e5-small
-TTS_MODEL=gemini-2.5-flash-preview-tts
-```
-
-Las API keys se pasan al backend, las de Telegram/ngrok al stack n8n + ngrok via `docker-compose.yml`.
-
-Los modelos se pueden cambiar libremente en `.env`:
-- **`GROQ_CHAT_MODEL`**: cualquier modelo de Groq (ej. `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `mixtral-8x7b-32768`)
-- **`EMBEDDING_MODEL`**: cualquier modelo de `fastembed` (`sentence-transformers/*` o `intfloat/*`)
-- **`TTS_MODEL`**: modelos TTS de Gemini (`gemini-2.5-flash-preview-tts`)
+- API keys: Groq (https://console.groq.com), Google (https://aistudio.google.com), Telegram BotFather, ngrok
 
 ### Levantar el Proyecto
 
@@ -409,82 +585,71 @@ Los modelos se pueden cambiar libremente en `.env`:
 cp .env.example .env   # Editar con tus API keys
 mkdir -p documents podcasts
 
-# 2. Iniciar servicios Docker
+# 2. Iniciar servicios
 docker compose up -d
 
 # 3. Verificar estado
 curl http://localhost:8000/api/health
 # → {"status":"ok","service":"study-assistant"}
 
-# 4. Iniciar frontend (desarrollo)
-cd frontend && npm install && npm run dev
-# → http://localhost:5173
+# 4. Importar workflow de Telegram en n8n
+#    (http://localhost:5678 → Workflows → Import)
+#    Archivo: workflows/telegram_bot.json
 
-# 5. (Opcional) Iniciar watcher host-side
-python backend/watcher_host.py --daemon
+# 5. Asignar credencial "telegramApi" a cada nodo Telegram
+#    (10 nodos: Trigger, Send Welcome, Send Help, etc.)
 
-# 6. (Opcional) Iniciar en Electron
-cd electron && npm install && npm run dev
+# 6. Activar workflow
 ```
 
 ### Servicios
 
-| Servicio    | Puerto | URL                     |
-|-------------|--------|-------------------------|
-| Backend     | 8000   | http://localhost:8000   |
-| Frontend    | 5173   | http://localhost:5173   |
-| n8n         | 5678   | http://localhost:5678   |
-| ngrok       | —      | https://{domain}.ngrok-free.dev |
-| Qdrant      | 6333   | http://localhost:6333   |
-| PostgreSQL  | 5433   | postgresql://localhost:5433 |
+| Servicio | Puerto | URL |
+|----------|--------|-----|
+| Backend  | 8000   | http://localhost:8000 |
+| n8n      | 5678   | http://localhost:5678 |
+| ngrok    | —      | https://{domain}.ngrok-free.dev |
+| Qdrant   | 6333   | http://localhost:6333 |
+| PostgreSQL | 5433 | postgresql://localhost:5433 |
 
-### Activar n8n Workflows
-
-1. Ir a http://localhost:5678
-2. Configurar cuenta (primera vez)
-3. Ir a Workflows → Import from File
-4. Importar `workflows/file_watcher.json`
-5. Toggle "Active" para activar el webhook
-6. (Si no hay callback a backend, ajustar URL en el nodo HTTP Request)
-
-### Telegram Bot
-
-```
-⚠️  El workflow de Telegram no se puede importar por la UI de n8n
-    debido a conflictos de credenciales. Usa el script automatizado.
-```
-
-```bash
-# 1. Configurar .env con TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_ID,
-#    NGROK_AUTHTOKEN, NGROK_DOMAIN
-
-# 2. Asegurar que Docker Compose está levantado
-docker compose up -d
-
-# 3. Ejecutar setup (importa credencial + workflow en DB)
-bash setup_telegram_bot.sh
-
-# 4. Abrir http://localhost:5678
-# 5. Abrir workflow "Telegram Bot"
-# 6. Vincular credencial "Telegram Bot" en CADA nodo Telegram
-#    (Trigger, Send Welcome, Send Help, Send Docs List, Send Generating,
-#     Send Podcast Help, Send Answer, Send Audio)
-# 7. Activar el workflow con el toggle ▶️
-# 8. Hablar con tu bot en Telegram
-```
-
-**Comandos del bot:**
+### Comandos del Bot de Telegram
 
 | Comando | Acción |
 |---------|--------|
 | `/start` | Mensaje de bienvenida |
 | `/help` | Lista de comandos |
-| `/ask <pregunta>` | Chat RAG con contexto de tus documentos |
-| `/podcast list` | Lista documentos disponibles |
-| `/podcast gen <id>` | Genera podcast de un documento |
-| `/podcast` | Ayuda de podcasts |
+| `/docs list [página]` | Lista documentos (10 por página) |
+| `/docs folders [página]` | Lista carpetas monitoreadas |
+| `/podcast gen <ID>` | Genera podcast de un documento |
+| `/podcast gen_folder <ruta>` | Genera podcast de una carpeta |
+| `/ask <pregunta>` | Chat RAG con tus documentos |
+| `/create docs <tema>` | Crea documento educativo con IA |
+| `/create podcast <tema>` | Crea podcast desde cero con IA |
 
-> **Idea principal**: el usuario configura carpetas locales (via Electron o watcher_host.py). Los documentos se procesan automáticamente (extracción → chunks → embeddings → Qdrant). Desde Telegram puedes consultar con RAG (`/ask`) o generar y escuchar podcasts (`/podcast gen`) cuando no tienes el PC a mano.
+---
+
+## ¿Qué Automatiza n8n?
+
+### n8n HACE:
+
+1. Escucha mensajes de Telegram cada 500ms (polling)
+2. Autoriza al usuario (filtro por chat ID)
+3. Enruta cada comando al procesador correcto
+4. Formatea respuestas (JSON → HTML legible)
+5. Envía respuestas de vuelta a Telegram (texto y audio)
+6. Maneja paginación (extrae números de página)
+7. Descarga archivos de audio del backend y los reenvía
+8. Provee fallback para comandos no reconocidos
+
+### n8n NO HACE (delega al backend):
+
+1. No procesa documentos (extracción, embeddings)
+2. No genera contenido (respuestas, guiones, audio)
+3. No busca en la base de datos vectorial
+4. No llama a APIs externas (Groq, Gemini)
+5. No monitorea carpetas
+
+> n8n es el **recepcionista** que recibe pedidos y los pasa al **equipo técnico** (backend).
 
 ---
 
@@ -492,122 +657,48 @@ bash setup_telegram_bot.sh
 
 | Decisión | Razón |
 |----------|-------|
-| **Groq como LLM principal** (no Gemini) | Gemini tuvo problemas de cuota (429); Groq es rápido, estable, y el modelo `llama-3.3-70b` da buena calidad académica |
-| **Gemini solo para TTS** | `gemini-2.5-flash-preview-tts` produce audio de alta calidad; la API usa `responseModalities: ["AUDIO"]` (array plural) y nombres de voz tipo estrellas (e.g. "zephyr") |
-| **fastembed local** | Embeddings offline, sin llamadas HTTP ni costos recurrentes; modelo multilingüe (español) |
-| **384 dimensiones** | Modelo `paraphrase-multilingual-MiniLM-L12-v2` = 384d. Balance entre velocidad y calidad |
-| **PostgreSQL + Qdrant** | Split: metadata y datos relacionales en Postgres, vectores de búsqueda semántica en Qdrant |
-| **Múltiples workflows n8n** | Separar file_watcher (detección) de process_document (procesamiento) permite reutilización |
-| **OCR en PPTX** | Tesseract con idioma español para extraer texto de diapositivas con imágenes |
-| **Audio PCM→WAV→MP3** | Gemini devuelve PCM raw 24kHz; se envuelve en WAV con `wave` module, luego se comprime a MP3 con pydub+ffmpeg |
-| **CSS variables sin blue** | Tema estrictamente monocromático: blanco puro / negro puro / grises neutros. Sin tonos azules o slate |
-| **Cascade delete en carpetas** | Al eliminar carpeta monitoreada, se borran todos sus documentos (PostgreSQL + Qdrant chunks) automáticamente |
-| **Single-user, sin auth** | Diseñado para uso personal local; no hay rutas de autenticación ni sesiones |
-| **Telegram por webhook + ngrok** | n8n 2.x no soporta polling; ngrok expone el webhook HTTPS con dominio fijo gratuito |
-| **Filtro por chat_id** | El nodo IF `Is Owner?` bloquea mensajes de cualquiera que no sea el dueño (`TELEGRAM_OWNER_ID`) |
-| **Importación SQL directa** | `n8n import:workflow` falla por conflictos de reassignación de credenciales; se inserta directo en SQLite |
+| **Groq como LLM principal** | Rápido, estable, buena calidad académica. Gemini tuvo problemas de cuota (429). |
+| **Gemini solo para TTS** | Alta calidad de voz, API con `responseModalities: ["AUDIO"]` y voces tipo estrella. |
+| **fastembed local** | Embeddings offline, sin costos recurrentes, modelo multilingüe. |
+| **384 dimensiones** | Balance entre velocidad y calidad semántica. |
+| **PostgreSQL + Qdrant** | Split: metadata relacional en Postgres, vectores semánticos en Qdrant. |
+| **Polling en Telegram** | n8n 2.21.4 permite polling nativo del trigger, sin depender de webhook externo. |
+| **Filtro por chat ID** | Seguridad simple: solo el dueño (`TELEGRAM_OWNER_ID`) puede usar el bot. |
+| **HTML parse_mode** | Todos los nodos Telegram usan `parse_mode: "HTML"` con escape de `<`, `>`, `&` en code nodes para evitar errores de entidad. |
+| **Modelos configurables** | `GROQ_CHAT_MODEL`, `EMBEDDING_MODEL`, `TTS_MODEL` se ajustan en `.env` sin tocar código. |
 
 ---
 
-## Flujo de Procesamiento Automático
+## Archivos del Proyecto
 
-```
-1. Usuario arrastra archivo a carpeta monitoreada
-       │
-2. watcher_host.py (host-side) detecta con watchdog
-       │
-3. POST a n8n webhook (http://localhost:5678/webhook/file-watcher)
-       │
-4. n8n workflow activado → llama a /api/documents/process
-       │
-5. Backend:
-   a. Calcula hash SHA-256 (evita duplicados)
-   b. Extrae texto (con OCR si PPTX con imágenes)
-   c. Divide en chunks con overlap
-   d. Genera embeddings con fastembed
-   e. Almacena en Qdrant
-   f. Dispara workflow n8n de procesamiento asíncrono
-   g. Marca documento como "processed"
-       │
-6. Frontend: al recargar, el documento aparece en la lista
-```
+| Archivo | Propósito |
+|---------|-----------|
+| `docker-compose.yml` | Infraestructura completa (5 servicios) |
+| `.env` | Variables de entorno y API keys (gitignored) |
+| `workflows/telegram_bot.json` | Workflow n8n del bot de Telegram (30 nodos) |
+| `backend/app/` | Código fuente del backend FastAPI |
+| `backend/app/routers/create.py` | Endpoints de creación con IA |
+| `backend/app/services/content_generator.py` | Generación de contenido educativo con Groq |
+| `backend/app/services/podcast_service.py` | Generación de guiones y síntesis de audio |
+| `docs/flujo-n8n-telegram.md` | Documentación detallada del flujo n8n + Telegram |
+| `postgres/init.sql` | Inicialización de base de datos |
+| `setup_telegram_bot.sh` | Script de configuración del bot (legacy) |
 
 ---
 
-## Telegram Bot — Uso Remoto
+## Glosario
 
-El bot de Telegram (`@studied_up_bot`) permite interactuar con tu asistente de estudio desde el celular, sin necesidad de tener el frontend abierto.
-
-### Flujo
-
-```
-Usuario abre Telegram
-        │
-        ▼
-  Envía comando al bot (@studied_up_bot)
-        │
-        ▼
-  ngrok (túnel HTTPS) → n8n Webhook
-        │
-        ▼
-  n8n Telegram Trigger recibe el mensaje
-        │
-        ▼
-  Switch node: rutea según el comando
-     ├── /ask → Code node (limpia /ask) → HTTP POST /api/chat/ask
-     │           → Backend RAG (Qdrant + Groq) → Respuesta → Telegram
-     │
-     └── /podcast gen <id> → HTTP POST /api/podcasts/by-document/{id}
-                             → Backend genera script (Groq)
-                             → Gemini TTS sintetiza audio
-                             → Audio MP3 → Telegram como mensaje de audio
-```
-
-### Requisitos para usar desde el celular
-
-1. **PC encendido** con Docker Compose corriendo
-2. **ngrok activo** (se levanta automáticamente con `docker compose up -d`)
-3. **Workflow activo** en n8n (toggle ▶️ ON)
-4. Conexión a internet (tu PC necesita salida)
-
-### Escuchar podcasts sin PC a mano
-
-1. Envía `/podcast list` para ver documentos disponibles con sus IDs
-2. Envía `/podcast gen <id>` para generar el podcast
-3. Espera ~30-60s (Groq genera guion + Gemini sintetiza audio)
-4. El bot te envía el archivo MP3 — escúchalo directo en Telegram
-
-### Arquitectura del workflow Telegram
-
-```
-Telegram Trigger (webhook vía ngrok)
-        │
-        ▼
-  Is Owner? (filtra por chat_id = TELEGRAM_OWNER_ID)
-        │
-        ▼
-  Route Command (Switch)
-     ├── output 0: /start   → Send Welcome
-     ├── output 1: /help    → Send Help
-     ├── output 2: /podcast list → Format Docs List → Send Docs List
-     ├── output 3: /podcast gen  → Send Generating → Extract Doc ID
-     │                           → Generate Podcast → Save Podcast ID
-     │                           → Get Audio → Send Audio
-     ├── output 4: /podcast → Send Podcast Help
-     ├── output 5: /ask     → Prepare Chat Body (Code)
-     │                       → Chat Ask (HTTP backend) → Send Answer
-     └── output 6: fallback → Send Help
-```
-
-El workflow `workflows/telegram_bot.json` se importa directamente en la base de datos SQLite de n8n mediante el script `setup_telegram_bot.sh`.
-
----
-
-- Chat persistente por documento (historial asociado a `document_id`)
-- Búsqueda global de texto en todos los documentos
-- Exportar flashcards y quizzes a PDF/Anki
-- Repetición espaciada para flashcards
-- Preview de documentos en el frontend
-- Mezcla de voces en podcasts (una voz por presentador)
-- Más idiomas para podcasts
-- Progreso visual durante generación de contenido
+| Término | Significado |
+|---------|-------------|
+| **n8n** | Plataforma de automatización de workflows visuales |
+| **Trigger** | Nodo que inicia el flujo (polling de Telegram) |
+| **Polling** | El bot pregunta periódicamente si hay nuevos mensajes |
+| **Switch** | Nodo que enruta según condiciones (como if/else) |
+| **Code Node** | Nodo que ejecuta código JavaScript en n8n |
+| **HTTP Request** | Nodo que hace llamadas HTTP (GET, POST) |
+| **RAG** | Retrieval Augmented Generation: busca información relevante y se la pasa al LLM |
+| **Embedding** | Vector numérico (384-dim) que representa el significado de un texto |
+| **Qdrant** | Base de datos vectorial para búsqueda semántica |
+| **Groq** | Proveedor de modelos de lenguaje (LLM) ultrarrápido |
+| **Gemini TTS** | Servicio de Google que convierte texto a voz natural |
+| **Endpoint** | URL de una API (ej: `/api/create/docs`) |

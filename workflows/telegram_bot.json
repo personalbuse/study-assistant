@@ -51,27 +51,47 @@
                 "operation": "startsWith"
               },
               {
-                "value2": "^/podcast list",
+                "value2": "^/docs list",
                 "output": 2,
                 "operation": "regex"
               },
               {
-                "value2": "^/podcast gen(?:erate)? \\d+",
+                "value2": "^/docs folders",
                 "output": 3,
                 "operation": "regex"
               },
               {
-                "value2": "/podcast",
+                "value2": "^/podcast gen(?:erate)? \\d+",
                 "output": 4,
-                "operation": "startsWith"
+                "operation": "regex"
+              },
+              {
+                "value2": "^/podcast gen_folder",
+                "output": 5,
+                "operation": "regex"
               },
               {
                 "value2": "/ask",
-                "output": 5,
+                "output": 6,
                 "operation": "startsWith"
+              },
+              {
+                "value2": "/podcast",
+                "output": 7,
+                "operation": "startsWith"
+              },
+              {
+                "value2": "^/create docs",
+                "output": 8,
+                "operation": "regex"
+              },
+              {
+                "value2": "^/create podcast",
+                "output": 9,
+                "operation": "regex"
               }
             ],
-            "fallbackOutput": 6
+            "fallbackOutput": 10
           }
         },
         "id": "switch-route-003",
@@ -100,7 +120,7 @@
           "resource": "message",
           "operation": "sendMessage",
           "chatId": "6732301888",
-          "text": "📋 Comandos disponibles:\n\n/ask &lt;pregunta&gt; — Pregunta sobre tus documentos (RAG)\n/podcast list — Lista documentos\n/podcast gen &lt;ID&gt; — Genera podcast de un documento\n/podcast folders — Lista carpetas monitoreadas\n/help — Este mensaje\n\n💡 Ej: /ask ¿qué es la fotosíntesis?",
+          "text": "📋 Comandos disponibles:\n\n/docs list [página] — Lista documentos (con paginación)\n/docs folders [página] — Lista carpetas monitoreadas\n/podcast gen ID — Genera podcast de un documento\n/podcast gen_folder ruta — Genera podcast de toda una carpeta\n/create docs tema — Crea un documento educativo desde cero\n/create podcast tema — Crea un podcast desde cero (sin documento previo)\n/ask pregunta — Pregunta sobre tus documentos (RAG)\n/help — Este mensaje\n\n💡 Ej: /docs list 2\n💡 Ej: /create docs \"seguridad informática\"\n💡 Ej: /create podcast \"ISO 27001\"",
           "additionalFields": {
             "parse_mode": "HTML"
           }
@@ -109,12 +129,23 @@
         "name": "Send Help",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1,
-        "position": [850, 250],
+        "position": [850, 200],
         "credentials": {}
       },
       {
         "parameters": {
-          "url": "http://backend:8000/api/documents",
+          "language": "javaScript",
+          "jsCode": "const text = $json.message.text;\nconst match = text.match(/^\\/docs list\\s*(\\d+)?/);\nconst page = match && match[1] ? parseInt(match[1]) : 1;\nconst pageSize = 10;\nreturn [{ json: { page, pageSize } }];"
+        },
+        "id": "code-docs-params-020",
+        "name": "Extract Docs Params",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [850, 400]
+      },
+      {
+        "parameters": {
+          "url": "=http://backend:8000/api/documents?page={{ $json.page }}&page_size={{ $json.pageSize }}",
           "options": {},
           "sendBody": false,
           "method": "GET"
@@ -123,18 +154,18 @@
         "name": "List Documents",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [850, 400]
+        "position": [1050, 400]
       },
       {
         "parameters": {
           "language": "javaScript",
-          "jsCode": "const docList = items.map(item => `  ${item.json.id}. ${item.json.filename}`).join('\\n');\nconst count = items.length;\nreturn [{ json: { text: `📚 Documentos disponibles (${count}):\\n\\n${docList}\\n\\nUsa: /podcast gen <ID>\\nEj: /podcast gen 5` } }];"
+          "jsCode": "const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst items = $json.items || [];\nconst total = $json.total || 0;\nconst page = $json.page || 1;\nconst pageSize = $json.page_size || 10;\nconst totalPages = Math.ceil(total / pageSize);\nconst docList = items.map(item => `  ${item.id}. ${escape(item.filename)}`).join('\\n');\nlet text = `📚 Documentos disponibles (${total} totales, página ${page}/${totalPages}):\\n\\n${docList}`;\nif (page < totalPages) text += `\\n\\nUsa: /docs list ${page + 1} para ver más`;\ntext += `\\n\\n🎙️ /podcast gen ID para generar podcast`;\nreturn [{ json: { text } }];"
         },
         "id": "code-format-007",
         "name": "Format Docs List",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1050, 400]
+        "position": [1250, 400]
       },
       {
         "parameters": {
@@ -142,13 +173,67 @@
           "operation": "sendMessage",
           "chatId": "6732301888",
           "text": "={{ $json.text }}",
-          "additionalFields": {}
+          "additionalFields": {
+            "parse_mode": "HTML"
+          }
         },
         "id": "tel-docs-008",
         "name": "Send Docs List",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1,
-        "position": [1250, 400],
+        "position": [1450, 400],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "language": "javaScript",
+          "jsCode": "const text = $json.message.text;\nconst match = text.match(/^\\/docs folders\\s*(\\d+)?/);\nconst page = match && match[1] ? parseInt(match[1]) : 1;\nconst pageSize = 10;\nreturn [{ json: { page, pageSize } }];"
+        },
+        "id": "code-folders-params-021",
+        "name": "Extract Folders Params",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [850, 500]
+      },
+      {
+        "parameters": {
+          "url": "=http://backend:8000/api/monitor/folders?page={{ $json.page }}&page_size={{ $json.pageSize }}",
+          "options": {},
+          "sendBody": false,
+          "method": "GET"
+        },
+        "id": "http-list-folders-022",
+        "name": "List Folders",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1050, 500]
+      },
+      {
+        "parameters": {
+          "language": "javaScript",
+          "jsCode": "const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst items = $json.items || [];\nconst total = $json.total || 0;\nconst page = $json.page || 1;\nconst pageSize = $json.page_size || 10;\nconst totalPages = Math.ceil(total / pageSize);\nconst folderList = items.map(f => `  ${f.id}. ${escape(f.path)}`).join('\\n');\nlet text = `📁 Carpetas monitoreadas (${total} totales, página ${page}/${totalPages}):\\n\\n${folderList}`;\nif (page < totalPages) text += `\\n\\nUsa: /docs folders ${page + 1} para ver más`;\ntext += `\\n\\n🎙️ /podcast gen_folder ruta para generar podcast de toda la carpeta`;\nreturn [{ json: { text } }];"
+        },
+        "id": "code-format-folders-023",
+        "name": "Format Folders List",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1250, 500]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "sendMessage",
+          "chatId": "6732301888",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "parse_mode": "HTML"
+          }
+        },
+        "id": "tel-send-folders-024",
+        "name": "Send Folders List",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [1450, 500],
         "credentials": {}
       },
       {
@@ -163,7 +248,7 @@
         "name": "Send Generating",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1,
-        "position": [850, 550],
+        "position": [850, 600],
         "credentials": {}
       },
       {
@@ -175,7 +260,7 @@
         "name": "Extract Doc ID",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1050, 550]
+        "position": [1050, 600]
       },
       {
         "parameters": {
@@ -188,7 +273,57 @@
         "name": "Generate Podcast",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1250, 550]
+        "position": [1250, 600]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "sendMessage",
+          "chatId": "6732301888",
+          "text": "🎙️ Generando podcast desde carpeta... esto toma unos segundos ⏳",
+          "additionalFields": {}
+        },
+        "id": "tel-gen-folder-025",
+        "name": "Send Generating Folder",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [850, 700],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "language": "javaScript",
+          "jsCode": "const text = $node['Telegram Trigger'].json.message.text;\nconst folderPath = text.replace(/^\\/podcast gen_folder\\s*/i, '').trim();\nreturn [{ json: { folder_path: folderPath } }];"
+        },
+        "id": "code-extract-folder-026",
+        "name": "Extract Folder Name",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1050, 700]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://backend:8000/api/podcasts/by-folder-path",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "http-gen-folder-027",
+        "name": "Generate Podcast by Folder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1250, 700]
       },
       {
         "parameters": {
@@ -199,7 +334,7 @@
         "name": "Download Audio",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1450, 550]
+        "position": [1500, 650]
       },
       {
         "parameters": {
@@ -227,21 +362,21 @@
         "name": "Send Audio Direct",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1850, 550]
+        "position": [1850, 650]
       },
       {
         "parameters": {
           "resource": "message",
           "operation": "sendMessage",
           "chatId": "6732301888",
-          "text": "📋 Subcomandos de /podcast:\n\n/podcast list — Documentos disponibles\n/podcast gen <ID> — Generar podcast de un documento\n/podcast folders — Carpetas monitoreadas\n\nEj: /podcast gen 5",
+          "text": "📋 Subcomandos de /podcast:\n\n/podcast gen ID — Generar podcast de un documento\n/podcast gen_folder ruta — Generar podcast de una carpeta\n\nUsa /docs list para ver documentos\nUsa /docs folders para ver carpetas\n\nEj: /podcast gen 5\nEj: /podcast gen_folder /home/docs/mi_materia",
           "additionalFields": {}
         },
         "id": "tel-podhelp-015",
         "name": "Send Podcast Help",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1,
-        "position": [850, 700],
+        "position": [850, 800],
         "credentials": {}
       },
       {
@@ -253,7 +388,7 @@
         "name": "Prepare Chat Body",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [850, 850]
+        "position": [850, 900]
       },
       {
         "parameters": {
@@ -277,7 +412,7 @@
         "name": "Chat Ask",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1050, 850]
+        "position": [1050, 900]
       },
       {
         "parameters": {
@@ -285,14 +420,103 @@
           "operation": "sendMessage",
           "chatId": "6732301888",
           "text": "={{ $json.answer }}",
-          "additionalFields": {}
+          "additionalFields": {
+            "parse_mode": "HTML"
+          }
         },
         "id": "tel-answer-017",
         "name": "Send Answer",
         "type": "n8n-nodes-base.telegram",
         "typeVersion": 1,
-        "position": [1050, 850],
+        "position": [1250, 900],
         "credentials": {}
+      },
+      {
+        "parameters": {
+          "language": "javaScript",
+          "jsCode": "const text = $node['Telegram Trigger'].json.message.text;\nconst topic = text.replace(/^\\/create docs\\s*/i, '').trim();\nreturn [{ json: { topic } }];"
+        },
+        "id": "code-extract-createdocs-028",
+        "name": "Extract Create Docs Topic",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [850, 1000]
+      },
+      {
+        "parameters": {
+          "language": "javaScript",
+          "jsCode": "const text = $node['Telegram Trigger'].json.message.text;\nconst topic = text.replace(/^\\/create podcast\\s*/i, '').trim();\nreturn [{ json: { topic } }];"
+        },
+        "id": "code-extract-createpodcast-029",
+        "name": "Extract Create Podcast Topic",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [850, 1100]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://backend:8000/api/create/docs",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "http-create-docs-030",
+        "name": "Create Docs",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1050, 1000]
+      },
+      {
+        "parameters": {
+          "resource": "message",
+          "operation": "sendMessage",
+          "chatId": "6732301888",
+          "text": "={{ $json.topic }}\n\n📄 Documento creado con ID: {{ $json.document_id }}\nArchivo: {{ $json.filepath }}\n\nUsa /docs list para verlo\nUsa /podcast gen {{ $json.document_id }} para generar podcast",
+          "additionalFields": {
+            "parse_mode": "HTML"
+          }
+        },
+        "id": "tel-create-confirm-032",
+        "name": "Send Create Confirm",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1,
+        "position": [1250, 1000],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://backend:8000/api/create/podcast",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "http-create-podcast-031",
+        "name": "Create Podcast",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1050, 1100]
       }
     ],
     "connections": {
@@ -336,7 +560,14 @@
           ],
           [
             {
-              "node": "List Documents",
+              "node": "Extract Docs Params",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Extract Folders Params",
               "type": "main",
               "index": 0
             }
@@ -350,7 +581,7 @@
           ],
           [
             {
-              "node": "Send Podcast Help",
+              "node": "Send Generating Folder",
               "type": "main",
               "index": 0
             }
@@ -364,6 +595,27 @@
           ],
           [
             {
+              "node": "Send Podcast Help",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Extract Create Docs Topic",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Extract Create Podcast Topic",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
               "node": "Send Help",
               "type": "main",
               "index": 0
@@ -371,11 +623,11 @@
           ]
         ]
       },
-      "Prepare Chat Body": {
+      "Extract Docs Params": {
         "main": [
           [
             {
-              "node": "Chat Ask",
+              "node": "List Documents",
               "type": "main",
               "index": 0
             }
@@ -398,6 +650,39 @@
           [
             {
               "node": "Send Docs List",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Folders Params": {
+        "main": [
+          [
+            {
+              "node": "List Folders",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "List Folders": {
+        "main": [
+          [
+            {
+              "node": "Format Folders List",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format Folders List": {
+        "main": [
+          [
+            {
+              "node": "Send Folders List",
               "type": "main",
               "index": 0
             }
@@ -437,6 +722,39 @@
           ]
         ]
       },
+      "Send Generating Folder": {
+        "main": [
+          [
+            {
+              "node": "Extract Folder Name",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Folder Name": {
+        "main": [
+          [
+            {
+              "node": "Generate Podcast by Folder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate Podcast by Folder": {
+        "main": [
+          [
+            {
+              "node": "Download Audio",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
       "Download Audio": {
         "main": [
           [
@@ -448,11 +766,66 @@
           ]
         ]
       },
+      "Prepare Chat Body": {
+        "main": [
+          [
+            {
+              "node": "Chat Ask",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
       "Chat Ask": {
         "main": [
           [
             {
               "node": "Send Answer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Create Docs Topic": {
+        "main": [
+          [
+            {
+              "node": "Create Docs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Docs": {
+        "main": [
+          [
+            {
+              "node": "Send Create Confirm",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Create Podcast Topic": {
+        "main": [
+          [
+            {
+              "node": "Create Podcast",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Podcast": {
+        "main": [
+          [
+            {
+              "node": "Download Audio",
               "type": "main",
               "index": 0
             }

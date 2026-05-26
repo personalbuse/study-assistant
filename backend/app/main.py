@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import documents, chat, monitor, content, podcasts
+from app.routers import documents, chat, monitor, content, podcasts, create
 
 Base.metadata.create_all(bind=engine)
 
@@ -19,6 +19,7 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(monitor.router, prefix="/api/monitor", tags=["monitor"])
 app.include_router(content.router, prefix="/api/content", tags=["content"])
 app.include_router(podcasts.router, prefix="/api/podcasts", tags=["podcasts"])
+app.include_router(create.router, prefix="/api/create", tags=["create"])
 
 
 @app.get("/api/health")

@@ -14,12 +14,15 @@ def generate_podcast_script(texts: list[str], title: str) -> list[dict]:
     prompt = f"""Eres un guionista de podcasts educativos. Genera un guion de conversacion entre dos presentadores (HostA y HostB) discutiendo el siguiente contenido academico en ESPAÑOL.
 
 Requisitos ESTRICTOS:
-- Debe durar 10-12 minutos de conversacion natural (al menos 25 intercambios)
+- La duracion debe ser natural segun el contenido: mas texto = mas conversacion, sin forzar una longitud fija
 - Cada intervencion debe tener 2-4 parrafos de contenido sustancial
 - HostA guia la conversacion, HostB hace preguntas y aporta ejemplos
 - Incluye: introduccion, desarrollo de conceptos clave, ejemplos practicos, conclusion
-- Usa un tono conversacional, no formal
+- Usa un tono conversacional, no formal, como una charla entre amigos
 - Alterna entre los dos presentadores
+- NO repitas los mismos conceptos: una vez explicado algo, avanza a nuevo material
+- Cada intervencion debe aportar informacion nueva, no reformular lo ya dicho
+- La conversacion debe fluir de forma natural: presentar un tema, profundizar, dar ejemplos, pasar al siguiente
 
 Devuelve SOLO JSON valido sin markdown:
 {{

@@ -22,6 +22,9 @@ processed_hashes.json
 # Credential files with secrets
 workflows/*credential*.json
 
+# Auto-generated preview files
+*.pdf
+
 # OS files
 .DS_Store
 Thumbs.db

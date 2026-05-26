@@ -24,9 +24,17 @@ class N8nChunksRequest(BaseModel):
 router = APIRouter()
 
 
-@router.get("/", response_model=list[DocumentResponse])
-def list_documents(db: Session = Depends(get_db)):
-    return db.query(Document).order_by(Document.created_at.desc()).all()
+@router.get("/")
+def list_documents(page: int = 1, page_size: int = 10, db: Session = Depends(get_db)):
+    query = db.query(Document).order_by(Document.created_at.desc())
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)

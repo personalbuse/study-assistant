@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_chat_model: str = "llama-3.1-8b-instant"
     google_api_key: str = ""
-    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     tts_model: str = "gemini-2.5-flash-preview-tts"
     n8n_webhook_url: str = "http://localhost:5678/webhook"
     collection_name: str = "document_chunks"
@@ -23,7 +23,7 @@ settings = Settings(
     groq_api_key=os.getenv("GROQ_API_KEY", ""),
     groq_chat_model=os.getenv("GROQ_CHAT_MODEL", "llama-3.1-8b-instant"),
     google_api_key=os.getenv("GOOGLE_API_KEY", ""),
-    embedding_model=os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-small"),
+    embedding_model=os.getenv("EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
     tts_model=os.getenv("TTS_MODEL", "gemini-2.5-flash-preview-tts"),
     n8n_webhook_url=os.getenv("N8N_WEBHOOK_URL", "http://localhost:5678/webhook"),
 )

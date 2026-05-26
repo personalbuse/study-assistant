@@ -13,6 +13,62 @@ from app.services.podcast_service import generate_podcast_script, synthesize_aud
 router = APIRouter()
 
 
+class FolderPathRequest(BaseModel):
+    folder_path: str
+
+
+@router.post("/by-folder-path")
+def create_podcast_by_folder_path(request: FolderPathRequest, db: Session = Depends(get_db)):
+    folder_path = request.folder_path.rstrip("/")
+
+    docs = db.query(Document).filter(
+        Document.filepath.startswith(folder_path),
+        Document.status == "processed",
+    ).all()
+    if not docs:
+        raise HTTPException(status_code=400, detail="No hay documentos procesados en esta carpeta")
+
+    doc_ids = [d.id for d in docs]
+    all_texts = []
+    for did in doc_ids:
+        all_texts.extend(vector_store.get_document_texts(did))
+
+    if not all_texts:
+        raise HTTPException(status_code=400, detail="No hay contenido en los documentos")
+
+    folder_name = os.path.basename(folder_path)
+    turns, duration = generate_podcast_script(all_texts, folder_name)
+
+    podcast = Podcast(
+        title=f"Podcast - {folder_name}",
+        folder_path=folder_path,
+        source_count=len(docs),
+        script=json.dumps(turns, ensure_ascii=False),
+        duration_seconds=duration,
+    )
+    db.add(podcast)
+    db.commit()
+    db.refresh(podcast)
+
+    try:
+        audio_path, actual_duration = synthesize_audio(turns, podcast.id)
+        podcast.audio_path = audio_path
+        podcast.duration_seconds = actual_duration
+        db.commit()
+    except Exception as e:
+        db.delete(podcast)
+        db.commit()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "id": podcast.id,
+        "title": podcast.title,
+        "source_count": podcast.source_count,
+        "duration_seconds": podcast.duration_seconds,
+        "created_at": podcast.created_at.isoformat(),
+    }
+
+
 @router.post("/by-document/{document_id}")
 def create_podcast_by_document(document_id: int, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == document_id).first()

@@ -11,13 +11,19 @@ router = APIRouter()
 
 
 @router.get("/folders")
-def list_folders(db: Session = Depends(get_db)):
-    folders = db.query(MonitoredFolder).all()
+def list_folders(page: int = 1, page_size: int = 10, db: Session = Depends(get_db)):
+    query = db.query(MonitoredFolder).order_by(MonitoredFolder.created_at.desc())
+    total = query.count()
+    folders = query.offset((page - 1) * page_size).limit(page_size).all()
+    items = [
+        {"id": f.id, "path": f.folder_path, "created_at": f.created_at.isoformat()}
+        for f in folders
+    ]
     return {
-        "folders": [
-            {"id": f.id, "path": f.folder_path, "created_at": f.created_at.isoformat()}
-            for f in folders
-        ]
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
     }
 
 

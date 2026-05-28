@@ -1,24 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: study-postgres
-    environment:
-      POSTGRES_USER: study_user
-      POSTGRES_PASSWORD: study_pass
-      POSTGRES_DB: study_assistant
-    volumes:
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U study_user -d study_assistant"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - study-net
-
   qdrant:
     image: qdrant/qdrant:v1.18
     container_name: study-qdrant
@@ -49,9 +29,6 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - ./workflows:/workflows
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - study-net
 
@@ -59,7 +36,7 @@ services:
     build: ./backend
     container_name: study-backend
     environment:
-      DATABASE_URL: postgresql://study_user:study_pass@postgres:5432/study_assistant
+      DATABASE_URL: postgresql://neondb_owner:npg_jRIp6yH7muUP@ep-young-field-aqsg3aoo-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       GROQ_API_KEY: ${GROQ_API_KEY}
@@ -76,8 +53,6 @@ services:
       - /home/daviuk:/home/daviuk:ro
       - ./podcasts:/app/podcasts
     depends_on:
-      postgres:
-        condition: service_healthy
       qdrant:
         condition: service_started
     networks:
@@ -95,7 +70,6 @@ services:
       - study-net
 
 volumes:
-  pgdata:
   qdrant_data:
   n8n_data:
 

@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -99,12 +100,19 @@ def create_docs(request: CreateDocsRequest, db: Session = Depends(get_db)):
 
     doc = _save_and_process_document(topic, content, db)
 
+    pdf_base64 = None
+    pdf_path = doc.filepath.replace(".md", ".pdf")
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            pdf_base64 = base64.b64encode(f.read()).decode("utf-8")
+
     return {
         "document_id": doc.id,
         "filename": doc.filename,
         "filepath": doc.filepath,
         "status": doc.status,
         "topic": topic,
+        "pdf_base64": pdf_base64,
     }
 
 

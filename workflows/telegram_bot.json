@@ -462,10 +462,10 @@
       {
         "parameters": {
           "language": "javaScript",
-          "jsCode": "const docId = $json.document_id;\nconst response = await this.helpers.httpRequest({\n  method: 'GET',\n  url: 'http://backend:8000/api/documents/' + docId + '/pdf',\n  encoding: 'arraybuffer',\n});\nconst buffer = Buffer.from(response);\nconst pdfFilename = ($json.filename || 'document.md').replace('.md', '.pdf');\nconst binaryData = await this.helpers.prepareBinaryData(buffer, pdfFilename, 'application/pdf');\nreturn [{ json: { document_id: docId, topic: $json.topic, filename: pdfFilename }, binary: { pdfData: binaryData } }];"
+          "jsCode": "const docId = $json.document_id;\nconst pdfBase64 = $json.pdf_base64;\nif (!pdfBase64) { throw new Error('No pdf_base64 in response'); }\nconst buffer = Buffer.from(pdfBase64, 'base64');\nconst pdfFilename = ($json.filename || 'document.md').replace('.md', '.pdf');\nconst binaryData = await this.helpers.prepareBinaryData(buffer, pdfFilename, 'application/pdf');\nreturn [{ json: { document_id: docId, topic: $json.topic, filename: pdfFilename }, binary: { pdfData: binaryData } }];"
         },
         "id": "code-download-pdf-033",
-        "name": "Download PDF",
+        "name": "Prepare PDF Binary",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [1250, 1000]

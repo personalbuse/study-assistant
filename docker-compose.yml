@@ -15,10 +15,10 @@ services:
     image: n8nio/n8n:latest
     container_name: study-n8n
     environment:
-      N8N_HOST: nonalternating-glaucomatous-necole.ngrok-free.dev
+      N8N_HOST: ${N8N_HOST}
       N8N_PORT: 5678
-      N8N_PROTOCOL: https
-      WEBHOOK_URL: https://nonalternating-glaucomatous-necole.ngrok-free.dev
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      WEBHOOK_URL: ${WEBHOOK_URL}
       N8N_METRICS: false
       N8N_BLOCK_ENV_ACCESS_IN_NODE: false
       N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN: true
@@ -58,16 +58,16 @@ services:
     networks:
       - study-net
 
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: study-ngrok
-    command: http n8n:5678 --url=https://${NGROK_DOMAIN}
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    depends_on:
-      - n8n
-    networks:
-      - study-net
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   container_name: study-ngrok
+  #   command: http n8n:5678 --url=https://${NGROK_DOMAIN}
+  #   environment:
+  #     NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+  #   depends_on:
+  #     - n8n
+  #   networks:
+  #     - study-net
 
 volumes:
   qdrant_data:

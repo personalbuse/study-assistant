@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.document import Document
 from app.models.podcast import Podcast
 from app.services.content_generator import generate_document_content
+from app.services.pdf_generator import generate_pdf_from_markdown
 from app.services.extractor import calculate_hash
 from app.services.chunker import chunk_document
 from app.services.vector_store import vector_store
@@ -38,6 +39,13 @@ def _save_and_process_document(topic: str, content: str, db: Session) -> Documen
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
+
+    pdf_path = os.path.join(folder, f"{slug}.pdf")
+    try:
+        generate_pdf_from_markdown(content, pdf_path)
+    except Exception as e:
+        print(f"[WARN] PDF generation failed for '{topic}': {e}")
+        pdf_path = None
 
     file_hash = calculate_hash(filepath)
     existing = db.query(Document).filter(Document.file_hash == file_hash).first()

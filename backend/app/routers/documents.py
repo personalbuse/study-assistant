@@ -1,4 +1,7 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db
@@ -344,3 +347,20 @@ def sync_from_monitored_folders(db: Session = Depends(get_db)):
         "total_removed": len(removed),
         "total_errors": len(errors),
     }
+
+
+@router.get("/{doc_id}/pdf")
+def get_document_pdf(doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    pdf_path = doc.filepath.replace(".md", ".pdf")
+    if not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF not found for this document")
+
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        filename=os.path.basename(pdf_path),
+    )

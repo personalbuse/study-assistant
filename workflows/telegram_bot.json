@@ -461,20 +461,47 @@
       },
       {
         "parameters": {
-          "resource": "message",
-          "operation": "sendMessage",
-          "chatId": "={{ $node['Telegram Trigger'].json.message.chat.id }}",
-          "text": "={{ $json.topic }}\n\n📄 Documento creado con ID: {{ $json.document_id }}\nArchivo: {{ $json.filepath }}\n\nUsa /docs list para verlo\nUsa /podcast gen {{ $json.document_id }} para generar podcast",
-          "additionalFields": {
-            "parse_mode": "HTML"
-          }
+          "language": "javaScript",
+          "jsCode": "const docId = $json.document_id;\nconst response = await this.helpers.httpRequest({\n  method: 'GET',\n  url: 'http://backend:8000/api/documents/' + docId + '/pdf',\n  encoding: 'arraybuffer',\n});\nconst buffer = Buffer.from(response);\nconst pdfFilename = ($json.filename || 'document.md').replace('.md', '.pdf');\nconst binaryData = await this.helpers.prepareBinaryData(buffer, pdfFilename, 'application/pdf');\nreturn [{ json: { document_id: docId, topic: $json.topic, filename: pdfFilename }, binary: { pdfData: binaryData } }];"
         },
-        "id": "tel-create-confirm-032",
-        "name": "Send Create Confirm",
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1,
-        "position": [1250, 1000],
-        "credentials": {}
+        "id": "code-download-pdf-033",
+        "name": "Download PDF",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1250, 1000]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendDocument",
+          "sendBody": true,
+          "contentType": "multipart-form-data",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "chat_id",
+                "value": "={{ $node['Telegram Trigger'].json.message.chat.id }}",
+                "parameterType": "formData"
+              },
+              {
+                "name": "document",
+                "inputDataFieldName": "pdfData",
+                "parameterType": "formBinaryData"
+              },
+              {
+                "name": "caption",
+                "value": "={{ $json.topic }}\n\n📄 Documento creado con ID: {{ $json.document_id }}\nUsa /docs list para verlo\nUsa /podcast gen {{ $json.document_id }} para generar podcast",
+                "parameterType": "formData"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "http-sendpdf-034",
+        "name": "Send PDF",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1450, 1000]
       },
       {
         "parameters": {
@@ -774,7 +801,18 @@
         "main": [
           [
             {
-              "node": "Send Create Confirm",
+              "node": "Download PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Download PDF": {
+        "main": [
+          [
+            {
+              "node": "Send PDF",
               "type": "main",
               "index": 0
             }

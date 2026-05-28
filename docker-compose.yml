@@ -36,7 +36,7 @@ services:
     build: ./backend
     container_name: study-backend
     environment:
-      
+      DATABASE_URL: "${DATABASE_URL}"
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       GROQ_API_KEY: ${GROQ_API_KEY}
@@ -50,7 +50,7 @@ services:
     volumes:
       - ./documents:/documents
       - ./backend:/app
-      - /home/daviuk:/home/daviuk:ro
+      - /home/:/home/:ro
       - ./podcasts:/app/podcasts
     depends_on:
       qdrant:

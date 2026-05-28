@@ -2,6 +2,7 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.18
     container_name: study-qdrant
+    restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
       - ./qdrant/config.yaml:/qdrant/config.yaml
@@ -14,6 +15,7 @@ services:
   n8n:
     image: n8nio/n8n:latest
     container_name: study-n8n
+    restart: unless-stopped
     environment:
       N8N_HOST: ${N8N_HOST}
       N8N_PORT: 5678
@@ -35,6 +37,7 @@ services:
   backend:
     build: ./backend
     container_name: study-backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: "${DATABASE_URL}"
       QDRANT_HOST: qdrant

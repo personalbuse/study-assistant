@@ -42,11 +42,7 @@ def _save_and_process_document(topic: str, content: str, db: Session) -> Documen
         f.write(content)
 
     pdf_path = os.path.join(folder, f"{slug}.pdf")
-    try:
-        generate_pdf_from_markdown(content, pdf_path)
-    except Exception as e:
-        print(f"[WARN] PDF generation failed for '{topic}': {e}")
-        pdf_path = None
+    generate_pdf_from_markdown(content, pdf_path)
 
     file_hash = calculate_hash(filepath)
     existing = db.query(Document).filter(Document.file_hash == file_hash).first()

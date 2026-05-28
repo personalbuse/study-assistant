@@ -36,7 +36,7 @@ services:
     build: ./backend
     container_name: study-backend
     environment:
-      DATABASE_URL: postgresql://neondb_owner:npg_jRIp6yH7muUP@ep-young-field-aqsg3aoo-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       GROQ_API_KEY: ${GROQ_API_KEY}
